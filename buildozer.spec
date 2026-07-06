@@ -4,7 +4,8 @@ package.name = zsskzmeny
 package.domain = org.zssk
 
 source.dir =.
-source.include_exts = py,png,jpg,kv,atlas,json
+source.include_exts = py,png,jpg,kv,atlas,json,ttf
+source.main = main.py
 
 version = 0.2
 requirements = python3,kivy==2.3.0
@@ -24,4 +25,4 @@ android.ndk = 25b
 android.build_tools = 33.0.2
 android.accept_sdk_license = True
 p4a.branch = develop
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE
+android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
