@@ -21,11 +21,9 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython==0.29.33
           
-      - name: Accept Android Licenses
-        run: |
-          yes | buildozer android update
-          
       - name: Build APK
+        env:
+          ACCEPT_ANDROID_LICENSES: "1"
         run: |
           buildozer android debug
           
