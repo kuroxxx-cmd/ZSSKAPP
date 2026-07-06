@@ -1,4 +1,4 @@
-[app]
+requirements = python3,kivy
 title = ZSSK Zmeny
 package.name = zsskzmeny
 package.domain = org.zssk
