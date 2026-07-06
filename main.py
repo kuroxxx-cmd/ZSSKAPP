@@ -1,4 +1,3 @@
-
 import json, os, datetime
 from pathlib import Path
 from kivy.app import App
@@ -12,6 +11,8 @@ from kivy.uix.spinner import Spinner
 from kivy.uix.popup import Popup
 from kivy.properties import StringProperty, ObjectProperty
 from kivy.clock import Clock
+
+__version__ = "0.2"
 
 DATA_FILE = "data.json"
 
@@ -91,108 +92,4 @@ class EditPopup(Popup):
         grid=GridLayout(cols=1, spacing=8, padding=10, size_hint_y=None); grid.bind(minimum_height=grid.setter('height'))
         self.inputs={}
         def add_field(key, label, is_spinner=False, is_time=False):
-            grid.add_widget(Label(text=label, size_hint_y=None, height=18, font_size=11, color=(0.6,0.7,0.8,1), halign='left'))
-            if is_spinner:
-                w=Spinner(text=self.orig.get(key,"Štandardný výkon"), values=SHIFT_TYPES, size_hint_y=None, height=40)
-            else:
-                w=TextInput(text=str(self.orig.get(key,"")), multiline=False, size_hint_y=None, height=40, hint_text=label)
-                if is_time: w.hint_text="HH:MM"
-            self.inputs[key]=w; grid.add_widget(w)
-        add_field("date","Dátum (YYYY-MM-DD)")
-        add_field("shift_type","Mzdový druh", is_spinner=True)
-        add_field("turnus","Turnusový deň")
-        add_field("plan","Plán. dĺžka (HH:MM)", is_time=True)
-        add_field("start","Nástup *", is_time=True)
-        add_field("end","Koniec *", is_time=True)
-        add_field("train_first","Prvý vlak")
-        add_field("route_from","Trať z")
-        add_field("train_last","Posledný vlak")
-        add_field("route_to","Trať do")
-        add_field("pc_start","Začiatok PC", is_time=True)
-        add_field("pc_end","Koniec PC", is_time=True)
-        add_field("pnp_start","PNP Od", is_time=True)
-        add_field("pnp_end","PNP Do", is_time=True)
-        add_field("meal_override","Stravné override (€)")
-        add_field("other_premiums","Iné príplatky (€)")
-        grid.add_widget(Label(text="Poznámka", size_hint_y=None, height=18, font_size=11))
-        self.inputs["note"]=TextInput(text=str(self.orig.get("note","")), size_hint_y=None, height=60, multiline=True); grid.add_widget(self.inputs["note"])
-        scroll.add_widget(grid); root.add_widget(scroll)
-        foot=BoxLayout(size_hint_y=None, height=50, spacing=10, padding=5)
-        b_cancel=Button(text="Zrušiť"); b_cancel.bind(on_release=lambda x: self.dismiss())
-        b_save=Button(text="Uložiť", background_color=(0.13,0.77,0.37,1)); b_save.bind(on_release=self.do_save)
-        foot.add_widget(b_cancel); foot.add_widget(b_save); root.add_widget(foot)
-        self.content=root
-    def do_save(self,*a):
-        data={k: (w.text if hasattr(w,'text') else w.text) for k,w in self.inputs.items()}
-        if not data.get("date"): return
-        data["uid"]=self.orig.get("uid") or str(datetime.datetime.now().timestamp())
-        self.on_save(data); self.dismiss()
-
-class ZSSKApp(App):
-    def build(self):
-        self.title="ZSSK Smeny"
-        self.shifts=self.load_data()
-        self.month=None
-        root=BoxLayout(orientation='vertical')
-        top=BoxLayout(size_hint_y=None, height=50, padding=5, spacing=5)
-        self.month_label=Label(text="", font_size=13)
-        btn_prev=Button(text="<", size_hint_x=0.15); btn_prev.bind(on_release=self.prev_month)
-        btn_next=Button(text=">", size_hint_x=0.15); btn_next.bind(on_release=self.next_month)
-        btn_add=Button(text="+ Pridať", background_color=(0.13,0.77,0.37,1), size_hint_x=0.3); btn_add.bind(on_release=lambda x: self.open_edit(None))
-        top.add_widget(btn_prev); top.add_widget(self.month_label); top.add_widget(btn_next); top.add_widget(btn_add)
-        root.add_widget(top)
-        self.kpi=Label(text="", size_hint_y=None, height=60, font_size=12); root.add_widget(self.kpi)
-        self.scroll=ScrollView(); self.list_layout=GridLayout(cols=1, spacing=6, padding=6, size_hint_y=None); self.list_layout.bind(minimum_height=self.list_layout.setter('height'))
-        self.scroll.add_widget(self.list_layout); root.add_widget(self.scroll)
-        Clock.schedule_once(lambda dt: self.refresh(),0.2)
-        return root
-    def load_data(self):
-        try:
-            if os.path.exists(DATA_FILE):
-                with open(DATA_FILE, encoding='utf-8') as f: d=json.load(f); return d if isinstance(d,list) else d.get('shifts_data',[])
-        except: pass
-        return []
-    def save_data(self):
-        try:
-            with open(DATA_FILE,'w',encoding='utf-8') as f: json.dump(self.shifts,f,ensure_ascii=False,indent=2)
-        except Exception as e: print(e)
-    def get_months(self):
-        s=sorted(set([x['date'][:7] for x in self.shifts if x.get('date')]))
-        return s
-    def refresh(self):
-        months=self.get_months()
-        if not months: self.month_label.text="Žiadne dáta"; self.list_layout.clear_widgets(); return
-        if not self.month: self.month=months[-1]
-        self.month_label.text=self.month
-        filtered=[x for x in self.shifts if x.get('date','').startswith(self.month)]
-        filtered.sort(key=lambda x: x['date'])
-        t=n=sa=su=0
-        for s in filtered:
-            c=calc_shift(s); t+=c['total']; n+=c['night']; sa+=c['sat']; su+=c['sun']
-        self.kpi.text=f"Spolu: {fmt(t)} | Noc: {fmt(n)} | SO: {fmt(sa)} NE: {fmt(su)} | Počet: {len(filtered)}"
-        self.list_layout.clear_widgets()
-        for s in filtered:
-            self.list_layout.add_widget(ShiftCard(s,self))
-    def prev_month(self,*a):
-        m=self.get_months()
-        if not m or not self.month: return
-        i=m.index(self.month); self.month=m[max(0,i-1)]; self.refresh()
-    def next_month(self,*a):
-        m=self.get_months()
-        if not m or not self.month: return
-        i=m.index(self.month); self.month=m[min(len(m)-1,i+1)]; self.refresh()
-    def open_edit(self, data):
-        def on_save(new_data):
-            if data:
-                idx=self.shifts.index(data); self.shifts[idx]=new_data
-            else:
-                self.shifts.append(new_data)
-            self.save_data(); self.refresh()
-        EditPopup(data or {}, on_save).open()
-    def delete_shift(self, data):
-        self.shifts.remove(data); self.save_data(); self.refresh()
-    def dup_shift(self, data):
-        import copy; nd=copy.deepcopy(data); nd['uid']=str(datetime.datetime.now().timestamp()); self.shifts.append(nd); self.save_data(); self.refresh()
-
-if __name__=='__main__':
-    ZSSKApp().run()
+            grid.add_widget(Label(text=label, size_hint_y=None, height=18, font_size=11, color=(0.6,0.7,0.8,1), halign
