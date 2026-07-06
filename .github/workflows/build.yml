@@ -25,15 +25,10 @@ jobs:
           sudo apt install -y git zip unzip python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev cmake libffi-dev libssl-dev
           pip install buildozer==1.5.0 cython==0.29.36
 
-      - name: Clean
-        run: |
-          rm -rf ~/.buildozer
-          rm -rf.buildozer
-
       - name: Build
         run: yes | buildozer -v android debug
 
-      - name: Upload
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ZSSK-APK
