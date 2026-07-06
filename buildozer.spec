@@ -5,10 +5,9 @@ package.domain = org.zssk
 
 source.dir =.
 source.include_exts = py,png,jpg,kv,atlas,json,ttf
-source.main = main.py
 
-version = 0.2
-requirements = python3,kivy==2.3.0
+version = 0.4
+requirements = python3==3.11.9,kivy==2.3.1,pyjnius==1.6.1,android
 
 orientation = portrait
 fullscreen = 0
@@ -25,4 +24,5 @@ android.ndk = 25b
 android.build_tools = 33.0.2
 android.accept_sdk_license = True
 p4a.branch = develop
+p4a.fork = kivy
 android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
