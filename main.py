@@ -98,4 +98,4 @@ class EditPopup(Popup):
         grid=GridLayout(cols=1, spacing=8, padding=10, size_hint_y=None); grid.bind(minimum_height=grid.setter('height'))
         self.inputs={}
         def add_field(key, label, is_spinner=False, is_time=False):
-            grid.add_widget(Label(text=label, size_hint_y=None, height=18, font_size=11, color=(0.6,0.7,0.8,1), halign
+            grid.add_widget(Label(text=label, size_hint_y=None, height=18, font_size=11, color=(0.6,0.7,0.8,1), halign='left', valign='middle', text_size=(self.width, None)))
