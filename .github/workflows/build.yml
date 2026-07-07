@@ -25,12 +25,6 @@ jobs:
           sudo apt install -y git zip unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev cmake libffi-dev libssl-dev
           pip install buildozer==1.5.0 cython==0.29.36
 
-      - name: Hard clean
-        run: |
-          rm -rf ~/.buildozer
-          rm -rf.buildozer
-          rm -rf bin
-
       - name: Build
         run: yes | buildozer -v android debug
         env:
