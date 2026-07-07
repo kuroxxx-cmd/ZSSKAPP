@@ -9,31 +9,36 @@ class ZSSKApp(App):
     def build(self):
         root = BoxLayout(orientation='vertical', padding=10, spacing=10)
 
-        # hlavička
-        self.header = Label(text='ZSSK Zmeny', font_size='24sp', size_hint_y=None, height=50)
-        root.add_widget(self.header)
+        header = Label(text='ZSSK Zmeny', font_size='24sp', size_hint_y=None, height=50)
+        root.add_widget(header)
 
-        # scroll zoznam
         scroll = ScrollView()
-        grid = GridLayout(cols=1, spacing=5, size_hint_y=None)
+        grid = GridLayout(cols=1, spacing=4, size_hint_y=None)
         grid.bind(minimum_height=grid.setter('height'))
-
-        try:
-            with open('data.json', encoding='utf-8') as f:
-                data = json.load(f)
-            self.header.text = f'Načítané: {len(data)} záznamov'
-
-            for i, zaznam in enumerate(data):
-                # zobrazíme len prvých pár položiek zo záznamu, aby sa zmestil
-                text = f"{i+1}. {zaznam.get('datum','')} – {zaznam.get('zmena','')} – {zaznam.get('poznamka','')}"
-                lbl = Label(text=text, size_hint_y=None, height=30, halign='left', valign='middle')
-                lbl.text_size = (self.root_window.width - 20, None) if hasattr(self, 'root_window') else (400, None)
-                grid.add_widget(lbl)
-        except Exception as e:
-            self.header.text = f'Chyba: {e}'
-
         scroll.add_widget(grid)
         root.add_widget(scroll)
+
+        try:
+            if os.path.exists('data.json'):
+                with open('data.json', encoding='utf-8') as f:
+                    data = json.load(f)
+                header.text = f'Načítané: {len(data)} záznamov'
+
+                for i, z in enumerate(data):
+                    # berieme len polia ktoré máš v JSON-e
+                    datum = z.get('datum', z.get('date', '?'))
+                    zmena = z.get('zmena', z.get('smena', '?'))
+                    poznamka = z.get('poznamka', '')
+                    txt = f"{i+1}. {datum} – {zmena} {poznamka}"
+                    lbl = Label(text=txt, size_hint_y=None, height=30, halign='left', valign='middle')
+                    # toto zaručí zalomenie textu bez použitia root_window
+                    lbl.bind(width=lambda inst, w: setattr(inst, 'text_size', (w-10, None)))
+                    grid.add_widget(lbl)
+            else:
+                header.text = 'data.json nenájdený'
+        except Exception as e:
+            header.text = f'Chyba: {e}'
+
         return root
 
 if __name__ == '__main__':
