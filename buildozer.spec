@@ -1,32 +1,39 @@
-[app]
-title = ZSSK Zmeny
-package.name = zsskzmeny
-package.domain = org.zssk
-source.dir =.
-source.include_exts = py,png,jpg,kv,atlas,json
-source.main = main.py
+name: Build APK v8
+on:
+  workflow_dispatch:
 
-version = 1.0
-requirements = python3,kivy
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
 
-orientation = portrait
-fullscreen = 0
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-[buildozer]
-log_level = 2
-warn_on_root = 0
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-[android]
-android.archs = arm64-v8a
-android.api = 33
-android.minapi = 21
-android.sdk = 33
-android.ndk = 25b
-android.build_tools = 33.0.2
-android.accept_sdk_license = True
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y git zip unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev cmake libffi-dev libssl-dev libltdl-dev
+          pip install --upgrade pip
+          pip install buildozer==1.5.0 cython==0.29.36 virtualenv
 
-p4a.fork = kivy
-p4a.branch = master
-p4a.bootstrap = sdl2
+      - name: Build APK
+        run: yes | buildozer -v android debug
+        env:
+          P4A_PYTHON_VERSION: "3.11"
 
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZSSK-APK-v8
+          path: bin/*.apk
+          retention-days: 14
