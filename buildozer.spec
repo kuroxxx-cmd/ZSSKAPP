@@ -9,8 +9,10 @@ source.main = main.py
 version = 8.0
 requirements = python3,kivy
 
-# Podpora mobil + tablet, obe orientácie, ale default portrait
-orientation = sensor
+# OPRAVA: buildozer 1.5.0 neberie "sensor" ako validnú hodnotu
+# Pre max kompatibilitu mobil + tablet nechaj portrait
+# alebo ak chceš rotáciu na tablete, zmeň na "all" alebo vymaž celý riadok
+orientation = portrait
 fullscreen = 0
 
 [buildozer]
@@ -18,7 +20,6 @@ log_level = 2
 warn_on_root = 0
 
 [android]
-# Kompatibilita max. zariadení
 android.archs = arm64-v8a, armeabi-v7a
 android.api = 33
 android.minapi = 21
@@ -31,9 +32,5 @@ p4a.fork = kivy
 p4a.branch = master
 p4a.bootstrap = sdl2
 
-# Android 13+ bez WRITE_EXTERNAL_STORAGE, všetko ide do user_data_dir
 android.permissions = INTERNET
 android.allow_backup = True
-# Pre tablety - povoliť veľké obrazovky
-android.features = android.hardware.touchscreen
-android.manifest.intent_filters = 
