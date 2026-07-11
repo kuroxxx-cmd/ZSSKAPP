@@ -19,7 +19,7 @@ THEMES = {
         'text': (0.96,0.97,0.99,1), 'subtext': (0.62,0.70,0.82,1), 'accent': (0.15,0.55,0.85,1),
         'btn_mesiac': (0.32,0.34,0.40,1), 'btn_turnus': (0.55,0.32,0.18,1),
         'btn_stats': (0.18,0.45,0.32,1), 'btn_export': (0.15,0.38,0.68,1),
-        'btn_settings': (0.38,0.38,0.42,1), 'btn_primary': (0,0.42,0.78,1), 'btn_save': (0.12,0.55,0.25,1), 'btn_oprav': (0.68,0.42,0.12,1),
+        'btn_settings': (0.38,0.38,0.42,1), 'btn_primary': (0,0.42,0.78,1), 'btn_save': (0.12,0.55,0.25,1), 'btn_oprav': (0.68,0.42,0.12,1), 'btn_danger': (0.78,0.18,0.18,1),
     },
     'zssk': {
         'name': 'ZSSK / PROSOFT svetlá', 'bg': (0.96,0.96,0.96,1), 'header_bg': (0.90,0.31,0.0,1),
@@ -28,7 +28,7 @@ THEMES = {
         'text': (0.13,0.13,0.15,1), 'subtext': (0.45,0.48,0.55,1), 'accent': (0.90,0.31,0.0,1),
         'btn_mesiac': (0.35,0.36,0.40,1), 'btn_turnus': (0.90,0.31,0.0,1),
         'btn_stats': (0.20,0.60,0.30,1), 'btn_export': (0.12,0.42,0.75,1),
-        'btn_settings': (0.45,0.46,0.50,1), 'btn_primary': (0.90,0.31,0.0,1), 'btn_save': (0.18,0.58,0.24,1), 'btn_oprav': (0.92,0.58,0.05,1),
+        'btn_settings': (0.45,0.46,0.50,1), 'btn_primary': (0.90,0.31,0.0,1), 'btn_save': (0.18,0.58,0.24,1), 'btn_oprav': (0.92,0.58,0.05,1), 'btn_danger': (0.85,0.20,0.20,1),
     }
 }
 
@@ -62,7 +62,7 @@ class ShiftCalculator:
         tot=night=sat=sun=hol=pnp=over=0; has=False
         is_vac=st in ["3000-Dovolenka - bežný rok","3010-Riad.dovol.min.r."]; is_abs=st in ["3440-Náhr.m.Ost.prek.nep","8000-Nemoc","8020-OČR","3191-Náhrada za vyšetrenie"]
         if is_vac or is_abs:
-            am=308; 
+            am=308
             if ptt: am=ptt.hour*60+ptt.minute
             return {"total_hours":"-","night_hours":"-","saturday_hours":"-","sunday_hours":"-","holiday_hours":"-","pnp_hours":"-","pnp_minutes":0,"overtime":"-","meal_allowance":0.0,"other_allowance":0.0,"vacation_minutes":am,"is_holiday":self.is_slovak_holiday(sd),"is_weekend":sd.weekday() in (5,6)}
         if pnpst and pnpet:
@@ -124,10 +124,10 @@ class FilePickerPopup(Popup):
                         if f.lower().endswith(('.json','.csv')): files.append(os.path.join(d,f))
                 except: pass
         files=sorted(files, reverse=True)[:100]
-        if not files: grid.add_widget(Label(text="Žiadne JSON/CSV v Download ani v app priečinku",size_hint_y=None,height=dp(50)))
+        if not files: grid.add_widget(Label(text="Žiadne JSON/CSV v Download",size_hint_y=None,height=dp(40)))
         for fp in files:
-            b=Button(text=os.path.basename(fp),size_hint_y=None,height=dp(44),background_normal='',background_color=(0.2,0.32,0.50,1),halign='left'); b.bind(on_press=lambda inst,p=fp: (self.callback(p), self.dismiss())); grid.add_widget(b)
-        scroll.add_widget(grid); box.add_widget(scroll); bc=Button(text="Zavrieť",size_hint_y=None,height=dp(44),background_normal='',background_color=(0.36,0.36,0.38,1)); bc.bind(on_press=self.dismiss); box.add_widget(bc); self.content=box
+            b=Button(text=os.path.basename(fp),size_hint_y=None,height=dp(44),background_normal='',background_color=(0.2,0.32,0.50,1)); b.bind(on_press=lambda inst,p=fp: (self.callback(p), self.dismiss())); grid.add_widget(b)
+        scroll.add_widget(grid); box.add_widget(scroll); bc=Button(text="Zavrieť",size_hint_y=None,height=dp(42),background_normal='',background_color=(0.36,0.36,0.38,1)); bc.bind(on_press=self.dismiss); box.add_widget(bc); self.content=box
 
 class ZSSKApp(App):
     def build(self):
@@ -136,6 +136,7 @@ class ZSSKApp(App):
         self._ensure_files(); self.employee=self.load_employee()
         today=datetime.date.today(); self.cur_year=self.employee.get('cur_year',today.year); self.cur_month=self.employee.get('cur_month',today.month)
         self.theme_key=self.employee.get('theme','tmava'); self.theme=THEMES.get(self.theme_key, THEMES['tmava'])
+        self.select_mode=False; self.selected_uids=set()
         root=BoxLayout(orientation='vertical',padding=dp(4),spacing=dp(3))
         with root.canvas.before: Color(*self.theme['bg']); self.bg=Rectangle(size=root.size,pos=root.pos); root.bind(size=lambda *a: (setattr(self.bg,'size',root.size), setattr(self.bg,'pos',root.pos)))
         header=BoxLayout(orientation='vertical',size_hint_y=None,height=dp(108),spacing=dp(2))
@@ -144,7 +145,6 @@ class ZSSKApp(App):
         b_prev=Button(text='◀',size_hint_x=None,width=dp(50),background_normal='',background_color=(0,0,0,0.18)); b_next=Button(text='▶',size_hint_x=None,width=dp(50),background_normal='',background_color=(0,0,0,0.18))
         self.lbl_month=Label(text='',font_size='17sp',bold=True,color=(1,1,1,1)); b_prev.bind(on_press=lambda x:self.shift_month(-1)); b_next.bind(on_press=lambda x:self.shift_month(1))
         nav.add_widget(b_prev); nav.add_widget(self.lbl_month); nav.add_widget(b_next); header.add_widget(nav)
-        # Akcie - 5 tlačidiel, bez Oprav
         actions_scroll=ScrollView(size_hint_y=None,height=dp(52),do_scroll_y=False,do_scroll_x=True,bar_width=0)
         actions=GridLayout(cols=5,spacing=dp(6),size_hint_x=None,height=dp(46),padding=(dp(4),0)); actions.bind(minimum_width=actions.setter('width'))
         for txt,key,fn in [('Mesiac','btn_mesiac',self.open_month_picker),('Turnus','btn_turnus',self.open_turnus_manager),('Stats','btn_stats',self.open_stats),('Imp/Exp','btn_export',self.open_export_menu),('⚙ Nastav','btn_settings',self.open_settings)]:
@@ -154,10 +154,23 @@ class ZSSKApp(App):
         self.lbl_kpi_main=Label(font_size='11sp',color=self.theme['text'],halign='left'); self.lbl_kpi_night=Label(font_size='11sp',color=self.theme['text'],halign='left'); self.lbl_kpi_meal=Label(font_size='11sp',color=self.theme['text'],halign='left')
         for l in [self.lbl_kpi_main,self.lbl_kpi_night,self.lbl_kpi_meal]: l.bind(size=lambda inst,*a: setattr(inst,'text_size',(inst.width,None)))
         self.kpi_box.add_widget(self.lbl_kpi_main); self.kpi_box.add_widget(self.lbl_kpi_night); self.kpi_box.add_widget(self.lbl_kpi_meal); root.add_widget(self.kpi_box)
-        self.lbl_info=Label(size_hint_y=None,height=dp(18),color=self.theme['subtext'],font_size='10sp'); root.add_widget(self.lbl_info)
+        self.lbl_info=Label(size_hint_y=None,height=dp(22),color=self.theme['subtext'],font_size='11sp'); root.add_widget(self.lbl_info)
         scroll=ScrollView(); self.grid=GridLayout(cols=1,spacing=dp(4),size_hint_y=None,padding=dp(2)); self.grid.bind(minimum_height=self.grid.setter('height')); scroll.add_widget(self.grid); root.add_widget(scroll)
-        bottom=BoxLayout(size_hint_y=None,height=dp(54),spacing=dp(6),padding=dp(3)); b_add=Button(text='+ Pridať zmenu',background_normal='',background_color=self.theme['btn_primary'],font_size='15sp',bold=True); b_pay=Button(text='💰 Výplata',size_hint_x=None,width=dp(100),background_normal='',background_color=self.theme['btn_stats'])
-        b_add.bind(on_press=lambda x:self.open_editor()); b_pay.bind(on_press=self.open_payroll); bottom.add_widget(b_add); bottom.add_widget(b_pay); root.add_widget(bottom)
+        # Spodný panel s výberom
+        bottom=BoxLayout(size_hint_y=None,height=dp(56),spacing=dp(6),padding=dp(3))
+        self.btn_select=Button(text='✓ Výber',size_hint_x=None,width=dp(88),background_normal='',background_color=self.theme['btn_settings'],font_size='12sp')
+        self.btn_select.bind(on_press=self.toggle_select_mode)
+        b_add=Button(text='+ Pridať zmenu',background_normal='',background_color=self.theme['btn_primary'],font_size='14sp',bold=True)
+        b_pay=Button(text='💰 Výplata',size_hint_x=None,width=dp(92),background_normal='',background_color=self.theme['btn_stats'],font_size='11sp')
+        b_add.bind(on_press=lambda x:self.open_editor()); b_pay.bind(on_press=self.open_payroll)
+        bottom.add_widget(self.btn_select); bottom.add_widget(b_add); bottom.add_widget(b_pay); root.add_widget(bottom)
+        # Panel pre hromadné akcie (skrytý kým nie je výber)
+        self.bulk_bar=BoxLayout(size_hint_y=None,height=dp(0),spacing=dp(6),padding=dp(3),opacity=0)
+        self.btn_bulk_del=Button(text='🗑 Zmazať označené (0)',background_normal='',background_color=self.theme['btn_danger'],font_size='12sp')
+        self.btn_bulk_month=Button(text='🗑 Vymazať mesiac',size_hint_x=None,width=dp(140),background_normal='',background_color=self.theme['btn_danger'],font_size='11sp')
+        self.btn_bulk_cancel=Button(text='Zrušiť výber',size_hint_x=None,width=dp(100),background_normal='',background_color=self.theme['btn_settings'],font_size='11sp')
+        self.btn_bulk_del.bind(on_press=self.delete_selected_confirm); self.btn_bulk_month.bind(on_press=self.delete_month_confirm); self.btn_bulk_cancel.bind(on_press=self.toggle_select_mode)
+        self.bulk_bar.add_widget(self.btn_bulk_del); self.bulk_bar.add_widget(self.btn_bulk_month); self.bulk_bar.add_widget(self.btn_bulk_cancel); root.add_widget(self.bulk_bar)
         self.refresh(); return root
 
     def _ensure_files(self):
@@ -218,6 +231,58 @@ class ZSSKApp(App):
         while m>12: m-=12; y+=1
         while m<1: m+=12; y-=1
         self.cur_year,self.cur_month=y,m; self.save_employee(); self.refresh()
+
+    # ---------- SELECT MODE ----------
+    def toggle_select_mode(self,*a):
+        self.select_mode=not self.select_mode
+        if not self.select_mode:
+            self.selected_uids.clear(); self.btn_select.text='✓ Výber'; self.btn_select.background_color=self.theme['btn_settings']
+            self.bulk_bar.height=dp(0); self.bulk_bar.opacity=0
+        else:
+            self.selected_uids=set(); self.btn_select.text='✕ Zrušiť'; self.btn_select.background_color=self.theme['btn_oprav']
+            self.bulk_bar.height=dp(52); self.bulk_bar.opacity=1
+        self.refresh()
+        self.update_bulk_label()
+
+    def toggle_one(self,uid):
+        if uid in self.selected_uids: self.selected_uids.remove(uid)
+        else: self.selected_uids.add(uid)
+        self.update_bulk_label(); self.refresh()
+
+    def update_bulk_label(self):
+        cnt=len(self.selected_uids)
+        self.btn_bulk_del.text=f'🗑 Zmazať označené ({cnt})' if cnt else '🗑 Zmazať označené (0)'
+        if cnt: self.lbl_info.text=f'Označených {cnt} zmien'
+        else: 
+            if self.select_mode: self.lbl_info.text='Označ zmeny na zmazanie - klikni na riadok alebo ☐'
+
+    def delete_selected_confirm(self,*a):
+        if not self.selected_uids:
+            self.show_info('Nič nie je označené. Označ aspoň jednu zmenu.'); return
+        cnt=len(self.selected_uids)
+        pop=Popup(title='Potvrdiť zmazanie',size_hint=(0.86,None),height=dp(260),separator_color=self.theme['btn_danger'])
+        box=BoxLayout(orientation='vertical',padding=dp(14),spacing=dp(10)); box.add_widget(Label(text=f'Naozaj vymazať {cnt} označených zmien?\nTáto akcia sa nedá vrátiť.',halign='center',color=self.theme['text']))
+        row=BoxLayout(size_hint_y=None,height=dp(48),spacing=dp(8)); b1=Button(text='Zrušiť',background_normal='',background_color=self.theme['btn_settings']); b2=Button(text=f'Áno, zmazať {cnt}',background_normal='',background_color=self.theme['btn_danger'],bold=True)
+        b1.bind(on_press=pop.dismiss)
+        def do_del(*_):
+            data=self.load_data(); new_data=[d for d in data if d.get('uid') not in self.selected_uids]; self.save_data(new_data); self.selected_uids.clear(); pop.dismiss(); self.toggle_select_mode(); self.show_info(f'Zmazaných {cnt} zmien.')
+        b2.bind(on_press=do_del); row.add_widget(b1); row.add_widget(b2); box.add_widget(row); pop.content=box; pop.open()
+
+    def delete_month_confirm(self,*a):
+        # Vymaže celý aktuálny mesiac
+        month=self.month_key(); data=[d for d in self.load_data() if d.get('date','').startswith(month)]; cnt=len(data)
+        if cnt==0: self.show_info(f'Mesiac {month} je už prázdny.'); return
+        pop=Popup(title=f'Vymazať mesiac {month}?',size_hint=(0.90,None),height=dp(300),separator_color=self.theme['btn_danger'])
+        box=BoxLayout(orientation='vertical',padding=dp(14),spacing=dp(10)); box.add_widget(Label(text=f'Mesiac {month} obsahuje {cnt} záznamov.\nNaozaj vymazať CELÝ mesiac?\n\nAk máš zapnutý výber, vymaže sa celý mesiac, nie len označené.',halign='center',color=self.theme['text'],font_size='12sp'))
+        row=BoxLayout(size_hint_y=None,height=dp(48),spacing=dp(8)); b1=Button(text='Zrušiť',background_normal='',background_color=self.theme['btn_settings']); b2=Button(text=f'Vymazať {cnt} záznamov',background_normal='',background_color=self.theme['btn_danger'],bold=True)
+        b1.bind(on_press=pop.dismiss)
+        def do_del(*_):
+            all_data=self.load_data(); keep=[d for d in all_data if not d.get('date','').startswith(month)]; self.save_data(keep); self.selected_uids.clear()
+            if self.select_mode: self.toggle_select_mode()
+            else: self.refresh()
+            pop.dismiss(); self.show_info(f'Mesiac {month} vymazaný ({cnt} záznamov).')
+        b2.bind(on_press=do_del); row.add_widget(b1); row.add_widget(b2); box.add_widget(row); pop.content=box; pop.open()
+
     def refresh(self):
         all_data=self.load_data(); month_data=[d for d in all_data if d.get('date','').startswith(self.month_key())]; month_data=sorted(month_data,key=lambda x:(x.get('date',''),x.get('start','')))
         self.lbl_month.text=f"{self.month_key()} • {len(month_data)} záznamov • Norma {self.get_auto_norm_str()}"
@@ -230,21 +295,35 @@ class ZSSKApp(App):
                     try: return int(h.split(':')[0])*60+int(h.split(':')[1]) if ':' in h else 0
                     except: return 0
                 totals['worked']+=p(calc.get('total_hours','0:00')) if calc.get('total_hours')!='-' else 0; totals['night']+=p(calc.get('night_hours','0:00')); totals['sat']+=p(calc.get('saturday_hours','0:00')); totals['sun']+=p(calc.get('sunday_hours','0:00')); totals['hol']+=p(calc.get('holiday_hours','0:00')); totals['pnp']+=calc.get('pnp_minutes',0); totals['overtime']+=p(calc.get('overtime','0:00')); totals['meal']+=calc.get('meal_allowance',0.0); totals['other']+=calc.get('other_allowance',0.0); totals['vacation']+=calc.get('vacation_minutes',0)
-            typ=s.get('shift_type') or 'Štandardný výkon'; base=theme_colors.get(typ, theme_colors.get('Štandardný výkon',(0.3,0.3,0.35,1)))
+            uid=s.get('uid'); typ=s.get('shift_type') or 'Štandardný výkon'; base=theme_colors.get(typ, theme_colors.get('Štandardný výkon',(0.3,0.3,0.35,1)))
             if calc and calc.get('is_holiday'): base=(min(base[0]+0.14,1),min(base[1]+0.14,1),min(base[2]+0.14,1),1)
-            btn=Button(size_hint_y=None,height=dp(66),background_normal='',background_color=base,color=(1,1,1,1) if self.theme_key=='tmava' or typ!='T.V. (Turnus voľno)' else (0.15,0.15,0.15,1),halign='left',valign='middle',padding=(dp(10),dp(4)),markup=True)
-            date=s.get('date',''); st=s.get('start',''); en=s.get('end',''); trains=f"{s.get('train_first','')} {s.get('route_from','')}→{s.get('train_last','')}".strip() or s.get('note','')[:34]
-            tot=calc.get('total_hours','-') if calc else '-'; ni=calc.get('night_hours','-') if calc else '-'
-            btn.text=f"[b]{date}[/b] {typ[:22]}\n{st}-{en} | {tot} N:{ni} {trains}"; btn.bind(size=lambda inst,*a: setattr(inst,'text_size',(inst.width-dp(20),None))); btn.bind(on_press=lambda inst,uid=s['uid']: self.open_editor(uid)); self.grid.add_widget(btn)
+            if self.select_mode:
+                row=BoxLayout(orientation='horizontal',size_hint_y=None,height=dp(66),spacing=dp(4))
+                is_sel=uid in self.selected_uids
+                cb=Button(text='☑' if is_sel else '☐',size_hint_x=None,width=dp(44),background_normal='',background_color=self.theme['btn_settings'] if not is_sel else self.theme['accent'],font_size='18sp')
+                cb.bind(on_press=lambda inst,u=uid: self.toggle_one(u))
+                main=Button(size_hint_x=1,background_normal='',background_color=base,color=(1,1,1,1) if self.theme_key=='tmava' or typ!='T.V. (Turnus voľno)' else (0.15,0.15,0.15,1),halign='left',valign='middle',padding=(dp(8),dp(4)),markup=True)
+                date=s.get('date',''); st=s.get('start',''); en=s.get('end',''); note=s.get('note','')[:30]
+                main.text=f"[b]{date}[/b] {typ[:20]}\n{st}-{en} {note}"; main.bind(size=lambda inst,*a: setattr(inst,'text_size',(inst.width-dp(16),None))); main.bind(on_press=lambda inst,u=uid: self.toggle_one(u))
+                row.add_widget(cb); row.add_widget(main); self.grid.add_widget(row)
+            else:
+                btn=Button(size_hint_y=None,height=dp(64),background_normal='',background_color=base,color=(1,1,1,1) if self.theme_key=='tmava' or typ!='T.V. (Turnus voľno)' else (0.15,0.15,0.15,1),halign='left',valign='middle',padding=(dp(10),dp(4)),markup=True)
+                date=s.get('date',''); st=s.get('start',''); en=s.get('end',''); note=s.get('note','')[:34]
+                tot=calc.get('total_hours','-') if calc else '-'; ni=calc.get('night_hours','-') if calc else '-'
+                btn.text=f"[b]{date}[/b] {typ[:22]}\n{st}-{en} | {tot} N:{ni} {note}"; btn.bind(size=lambda inst,*a: setattr(inst,'text_size',(inst.width-dp(20),None))); btn.bind(on_press=lambda inst,u=uid: self.open_editor(u)); self.grid.add_widget(btn)
         def fmt(m): return f"{m//60:02d}:{m%60:02d}"
         auto_norm=self.get_auto_norm_minutes(); saldo=totals['worked']-auto_norm; sign='+' if saldo>=0 else ''; saldo_str=f"{sign}{fmt(abs(saldo))}" if saldo!=0 else "0:00"
         self.lbl_kpi_main.text=f"Odprac: {fmt(totals['worked'])} / Norma {self.get_auto_norm_str()}\nSaldo: {saldo_str} {'nad' if saldo>0 else 'pod' if saldo<0 else ''}"
         self.lbl_kpi_night.text=f"Nočná:{fmt(totals['night'])}\nSo:{fmt(totals['sat'])} Ne:{fmt(totals['sun'])}"
         self.lbl_kpi_meal.text=f"Sviatok:{fmt(totals['hol'])} PNP:{fmt(totals['pnp'])}\nStravné:{totals['meal']:.2f}€"
         self.current_totals=totals; self.current_saldo=saldo
+        if not self.select_mode: self.lbl_info.text=f'{len(month_data)} záznamov - klik pre úpravu, ✓ Výber pre hromadné mazanie'
 
-    # ---------- EDITOR ----------
+    # ---------- EDITOR (skrátený, rovnaký ako v10) ----------
     def open_editor(self,uid=None):
+        if self.select_mode: 
+            if uid: self.toggle_one(uid)
+            return
         all_data=self.load_data(); edit=None
         if uid:
             for d in all_data:
@@ -261,8 +340,8 @@ class ZSSKApp(App):
         row_r=BoxLayout(size_hint_y=None,height=dp(40),spacing=dp(4)); irf=TextInput(text=edit.get('route_from',''),hint_text='Z',multiline=False,background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); irt=TextInput(text=edit.get('route_to',''),hint_text='Do',multiline=False,background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); row_r.add_widget(irf); row_r.add_widget(irt); add_row('Trať Z → Do',row_r)
         def time_row(label,key):
             r=BoxLayout(size_hint_y=None,height=dp(40),spacing=dp(4)); inp=TextInput(text=edit.get(key,''),hint_text='HH:MM',multiline=False,background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); btn=Button(text='🕒',size_hint_x=None,width=dp(44),background_normal='',background_color=self.theme['btn_export']); btn.bind(on_press=lambda *_: TimePickerPopup(initial=inp.text or "08:00",callback=lambda v:setattr(inp,'text',v)).open()); r.add_widget(inp); r.add_widget(btn); add_row(label,r); return inp
-        ins=time_row('Nástup','start'); ine=time_row('Koniec','end'); ipl=time_row('Plán FPČ (napr. 08:00)','plan'); ipcs=time_row('PC začiatok','pc_start'); ipce=time_row('PC koniec','pc_end'); ipnps=time_row('PNP začiatok','pnp_start'); ipnpe=time_row('PNP koniec','pnp_end')
-        im=TextInput(text=edit.get('meal_override',''),hint_text='prázdne = auto výpočet',multiline=False,size_hint_y=None,height=dp(38),background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); add_row('Stravné override €',im)
+        ins=time_row('Nástup','start'); ine=time_row('Koniec','end'); ipl=time_row('Plán FPČ','plan'); ipcs=time_row('PC zač','pc_start'); ipce=time_row('PC koniec','pc_end'); ipnps=time_row('PNP zač','pnp_start'); ipnpe=time_row('PNP koniec','pnp_end')
+        im=TextInput(text=edit.get('meal_override',''),hint_text='prázdne=auto',multiline=False,size_hint_y=None,height=dp(38),background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); add_row('Stravné override €',im)
         io=TextInput(text=edit.get('other_premiums',''),hint_text='Iné €',multiline=False,size_hint_y=None,height=dp(38),background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); add_row('Iné príplatky €',io)
         ino=TextInput(text=edit.get('note',''),multiline=True,size_hint_y=None,height=dp(66),background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); add_row('Poznámka',ino)
         lbl_prev=Label(text='Náhľad: -',size_hint_y=None,height=dp(44),color=self.theme['subtext'],font_size='11sp'); form.add_widget(lbl_prev)
@@ -288,93 +367,59 @@ class ZSSKApp(App):
         if not is_new: btns.add_widget(bd)
         btns.add_widget(bs); root.add_widget(btns); popup.content=root; popup.open()
 
-    # ---------- TURNUS MANAGER - OPRAVENÉ POPISY + IMPORT/EXPORT VNÚTRI ----------
+    # ---------- TURNUS, EXPORT, STATS, MESIAC, VÝPLATA - rovnaké ako v10 (skrátene) ----------
     def open_turnus_manager(self,*a):
         prof_list, active_name, full = self.get_active_turnus()
         popup=Popup(title=f'Turnus - aktívny: {active_name}',size_hint=(0.96,0.92),separator_color=self.theme['btn_turnus'],auto_dismiss=False)
         root=BoxLayout(orientation='vertical',spacing=dp(8),padding=dp(10)); scroll=ScrollView(size_hint_y=1); form=GridLayout(cols=1,spacing=dp(10),size_hint_y=None,padding=dp(2)); form.bind(minimum_height=form.setter('height'))
-
-        # Profil výber
-        box_prof=BoxLayout(orientation='vertical',size_hint_y=None,height=dp(90),spacing=dp(4))
-        box_prof.add_widget(Label(text='Aktívny profil turnusu',size_hint_y=None,height=dp(18),font_size='11sp',color=self.theme['subtext'],halign='left'))
-        row_prof=BoxLayout(size_hint_y=None,height=dp(42),spacing=dp(6))
-        sp_prof=Spinner(text=active_name,values=list(full.get('profiles',{}).keys()) or [active_name],size_hint_x=0.65,background_normal='',background_color=self.theme['row_bg']); b_set=Button(text='Nastaviť aktívny',size_hint_x=0.35,background_normal='',background_color=self.theme['btn_turnus'])
-        def set_active(*_):
-            full['active']=sp_prof.text; self.save_turnus_file(full); popup.title=f'Turnus - aktívny: {sp_prof.text}'; self.show_info(f'Aktívny turnus zmenený na {sp_prof.text}')
-        b_set.bind(on_press=set_active); row_prof.add_widget(sp_prof); row_prof.add_widget(b_set); box_prof.add_widget(row_prof)
-        box_prof.add_widget(Label(text=f'Počet šablón v profile: {len(prof_list)}',size_hint_y=None,height=dp(18),font_size='10sp',color=self.theme['subtext'])); form.add_widget(box_prof)
-
-        # --- OPRAVENÉ POLIA S POPISMI ---
-        # TD
-        box_td=BoxLayout(orientation='vertical',size_hint_y=None,height=dp(72),spacing=dp(2))
-        box_td.add_widget(Label(text='TD - číslo turnusového dňa (1 až dĺžka turnusu)',size_hint_y=None,height=dp(20),font_size='11sp',color=self.theme['text'],halign='left'))
-        inp_td=TextInput(text='1',multiline=False,size_hint_y=None,height=dp(40),background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg'],hint_text='napr. 1'); box_td.add_widget(inp_td); form.add_widget(box_td)
-
-        # Dĺžka
-        box_len=BoxLayout(orientation='vertical',size_hint_y=None,height=dp(72),spacing=dp(2))
-        box_len.add_widget(Label(text='Dĺžka turnusu - počet dní v cykle (napr. 8, 12, 21)',size_hint_y=None,height=dp(20),font_size='11sp',color=self.theme['text'],halign='left'))
-        inp_len=TextInput(text='8',multiline=False,size_hint_y=None,height=dp(40),background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg'],hint_text='napr. 8'); box_len.add_widget(inp_len); form.add_widget(box_len)
-
-        form.add_widget(Label(text='Generátor použije TD na 1.deň v mesiaci a postupne pripočíta dni. Pre každý deň hľadá šablónu podľa TD a dňa v týždni (Po-Ne,Sv). Ak nenájde, použije PATTERN fallback.',size_hint_y=None,height=dp(48),font_size='10sp',color=self.theme['subtext'],halign='left',text_size=(dp(320),None)))
-
-        # Import / Export turnusu - presunuté sem
-        box_ie=BoxLayout(orientation='vertical',size_hint_y=None,height=dp(108),spacing=dp(6))
-        box_ie.add_widget(Label(text='Import / Export turnusu',size_hint_y=None,height=dp(20),font_size='11sp',bold=True,color=self.theme['text']))
-        row_ie=BoxLayout(size_hint_y=None,height=dp(42),spacing=dp(6))
-        b_imp=Button(text='📥 Import turnusu',background_normal='',background_color=self.theme['btn_export'],font_size='11sp'); b_exp=Button(text='📤 Export aktívneho',background_normal='',background_color=self.theme['btn_stats'],font_size='11sp')
+        box_prof=BoxLayout(orientation='vertical',size_hint_y=None,height=dp(90),spacing=dp(4)); box_prof.add_widget(Label(text='Aktívny profil turnusu',size_hint_y=None,height=dp(18),font_size='11sp',color=self.theme['subtext'])); row_prof=BoxLayout(size_hint_y=None,height=dp(42),spacing=dp(6)); sp_prof=Spinner(text=active_name,values=list(full.get('profiles',{}).keys()) or [active_name],size_hint_x=0.65,background_normal='',background_color=self.theme['row_bg']); b_set=Button(text='Nastaviť aktívny',size_hint_x=0.35,background_normal='',background_color=self.theme['btn_turnus'])
+        def set_active(*_): full['active']=sp_prof.text; self.save_turnus_file(full); popup.title=f'Turnus - aktívny: {sp_prof.text}'; self.show_info(f'Aktívny: {sp_prof.text}')
+        b_set.bind(on_press=set_active); row_prof.add_widget(sp_prof); row_prof.add_widget(b_set); box_prof.add_widget(row_prof); box_prof.add_widget(Label(text=f'Počet šablón: {len(prof_list)}',size_hint_y=None,height=dp(18),font_size='10sp',color=self.theme['subtext'])); form.add_widget(box_prof)
+        box_td=BoxLayout(orientation='vertical',size_hint_y=None,height=dp(72),spacing=dp(2)); box_td.add_widget(Label(text='TD - číslo turnusového dňa (1 až dĺžka)',size_hint_y=None,height=dp(20),font_size='11sp',color=self.theme['text'])); inp_td=TextInput(text='1',multiline=False,size_hint_y=None,height=dp(40),background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); box_td.add_widget(inp_td); form.add_widget(box_td)
+        box_len=BoxLayout(orientation='vertical',size_hint_y=None,height=dp(72),spacing=dp(2)); box_len.add_widget(Label(text='Dĺžka turnusu - počet dní v cykle',size_hint_y=None,height=dp(20),font_size='11sp',color=self.theme['text'])); inp_len=TextInput(text='8',multiline=False,size_hint_y=None,height=dp(40),background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); box_len.add_widget(inp_len); form.add_widget(box_len)
+        box_ie=BoxLayout(orientation='vertical',size_hint_y=None,height=dp(110),spacing=dp(6)); box_ie.add_widget(Label(text='Import / Export turnusu',size_hint_y=None,height=dp(20),font_size='11sp',bold=True,color=self.theme['text'])); row_ie=BoxLayout(size_hint_y=None,height=dp(42),spacing=dp(6)); b_imp=Button(text='📥 Import',background_normal='',background_color=self.theme['btn_export'],font_size='11sp'); b_exp=Button(text='📤 Export',background_normal='',background_color=self.theme['btn_stats'],font_size='11sp')
         def do_imp(*_):
             def on_pick(path):
                 try:
-                    with open(path,encoding='utf-8') as f: data=json.load(f)
-                    tf=self.load_turnus_file(); name=os.path.splitext(os.path.basename(path))[0]
+                    with open(path,encoding='utf-8') as f: data=json.load(f); tf=self.load_turnus_file(); name=os.path.splitext(os.path.basename(path))[0]
                     if isinstance(data,list): tf['profiles'][name]=data; tf['active']=name
                     elif isinstance(data,dict) and 'profiles' in data: tf=data
                     else: self.show_info('Neplatný formát'); return
-                    self.save_turnus_file(tf); self.show_info(f'Importovaný profil {name} nastavený ako aktívny. Reštartuj generátor.')
+                    self.save_turnus_file(tf); self.show_info(f'Importovaný {name}')
                 except Exception as e: self.show_info(f'Chyba: {e}')
             FilePickerPopup(self.get_download_dirs(), on_pick).open()
         def do_exp(*_):
-            tf=self.load_turnus_file(); fname=f"turnus_{tf.get('active','profil')}.json"; out=os.path.join(self.user_data_dir,fname)
+            tf=self.load_turnus_file(); out=os.path.join(self.user_data_dir,f"turnus_{tf.get('active','profil')}.json")
             try:
-                with open(out,'w',encoding='utf-8') as f: json.dump(tf,f,ensure_ascii=False,indent=2); self.show_info(f'Export: {out}\nSkopíruj do Download pre zálohu.')
+                with open(out,'w',encoding='utf-8') as f: json.dump(tf,f,ensure_ascii=False,indent=2); self.show_info(f'Export: {out}')
             except Exception as e: self.show_info(f'Chyba: {e}')
-        b_imp.bind(on_press=do_imp); b_exp.bind(on_press=do_exp); row_ie.add_widget(b_imp); row_ie.add_widget(b_exp); box_ie.add_widget(row_ie)
-        box_ie.add_widget(Label(text='Po prázdninách: Importuj nový turnus, vytvorí sa nový profil. Starý ostane uložený.',size_hint_y=None,height=dp(28),font_size='10sp',color=self.theme['subtext'])); form.add_widget(box_ie)
-
-        lbl_status=Label(text='',size_hint_y=None,height=dp(24),font_size='11sp',color=self.theme['subtext']); form.add_widget(lbl_status)
-        scroll.add_widget(form); root.add_widget(scroll)
-        btns=BoxLayout(size_hint_y=None,height=dp(50),spacing=dp(6)); b_cancel=Button(text='Zavrieť',background_normal='',background_color=self.theme['btn_settings']); b_gen=Button(text='⚙ Generovať mesiac',background_normal='',background_color=self.theme['btn_oprav'],bold=True)
-        b_cancel.bind(on_press=popup.dismiss)
+        b_imp.bind(on_press=do_imp); b_exp.bind(on_press=do_exp); row_ie.add_widget(b_imp); row_ie.add_widget(b_exp); box_ie.add_widget(row_ie); box_ie.add_widget(Label(text='Po prázdninách importuj nový, starý ostane.',size_hint_y=None,height=dp(24),font_size='10sp',color=self.theme['subtext'])); form.add_widget(box_ie)
+        lbl=Label(text='',size_hint_y=None,height=dp(20),font_size='11sp',color=self.theme['subtext']); form.add_widget(lbl); scroll.add_widget(form); root.add_widget(scroll)
+        btns=BoxLayout(size_hint_y=None,height=dp(50),spacing=dp(6)); bc=Button(text='Zavrieť',background_normal='',background_color=self.theme['btn_settings']); bg=Button(text='⚙ Generovať mesiac',background_normal='',background_color=self.theme['btn_oprav'],bold=True); bc.bind(on_press=popup.dismiss)
         def gen(*_):
-            try: start_td=int(inp_td.text); turn_len=int(inp_len.text)
-            except: lbl_status.text='Chyba: TD a dĺžka musia byť čísla'; return
-            data=self.load_data(); _, act_name, full2=self.get_active_turnus(); tdata=full2['profiles'].get(full2['active'],[]); days_in_month=calendar.monthrange(self.cur_year,self.cur_month)[1]; keep=[d for d in data if not d.get('date','').startswith(self.month_key())]; new_month=[]
-            for day in range(1,days_in_month+1):
-                ds=f"{self.cur_year:04d}-{self.cur_month:02d}-{day:02d}"; cur_td=((start_td-1+day-1)%turn_len)+1; dobj=datetime.date(self.cur_year,self.cur_month,day); is_hol=self.calculator.is_slovak_holiday(dobj); tgt="Sv" if is_hol else ["Po","Ut","St","Št","Pi","So","Ne"][dobj.weekday()]; match=None
-                for t in tdata:
-                    if str(t.get('td'))==str(cur_td) and tgt in t.get('days',[]): match=t; break
-                if match: shift={"uid":str(uuid.uuid4()),"date":ds,"shift_type":match.get('shift_type','Štandardný výkon'),"train_first":match.get('train_first',''),"route_from":match.get('route_from',''),"train_last":match.get('train_last',''),"route_to":match.get('route_to',''),"turnus":str(cur_td),"start":match.get('start',''),"end":match.get('end',''),"pc_start":match.get('pc_start',''),"pc_end":match.get('pc_end',''),"plan":match.get('plan',''),"pnp_start":match.get('pnp_start',''),"pnp_end":match.get('pnp_end',''),"meal_override":match.get('meal_override',''),"other_premiums":match.get('other_premiums',''),"note":""}
-                else: typ=PATTERN[(day-1)%len(PATTERN)]; is_tv=typ in ('Voľno',); shift={"uid":str(uuid.uuid4()),"date":ds,"shift_type":"T.V. (Turnus voľno)" if is_tv else "Štandardný výkon","train_first":"T.V." if is_tv else "","route_from":"","train_last":"T.V." if is_tv else "","route_to":"","turnus":str(cur_td),"start":"","end":"","pc_start":"","pc_end":"","plan":"08:00" if not is_tv else "","pnp_start":"","pnp_end":"","meal_override":"","other_premiums":"","note":typ}
-                new_month.append(shift)
-            keep.extend(new_month); self.save_data(keep); self.refresh(); popup.dismiss(); self.show_info(f'Vygenerovaných {len(new_month)} dní pre {self.month_key()} z profilu {act_name}')
-        b_gen.bind(on_press=gen); btns.add_widget(b_cancel); btns.add_widget(b_gen); root.add_widget(btns); popup.content=root; popup.open()
-
-    # alias pre staré volanie
+            try: std=int(inp_td.text); tl=int(inp_len.text)
+            except: lbl.text='Zadaj čísla'; return
+            data=self.load_data(); _, an, full2=self.get_active_turnus(); td=full2['profiles'].get(full2['active'],[]); dim=calendar.monthrange(self.cur_year,self.cur_month)[1]; keep=[d for d in data if not d.get('date','').startswith(self.month_key())]; nm=[]
+            for day in range(1,dim+1):
+                ds=f"{self.cur_year:04d}-{self.cur_month:02d}-{day:02d}"; ctd=((std-1+day-1)%tl)+1; dob=datetime.date(self.cur_year,self.cur_month,day); is_h=self.calculator.is_slovak_holiday(dob); tgt="Sv" if is_h else ["Po","Ut","St","Št","Pi","So","Ne"][dob.weekday()]; m=None
+                for t in td:
+                    if str(t.get('td'))==str(ctd) and tgt in t.get('days',[]): m=t; break
+                if m: sh={"uid":str(uuid.uuid4()),"date":ds,"shift_type":m.get('shift_type','Štandardný výkon'),"train_first":m.get('train_first',''),"route_from":m.get('route_from',''),"train_last":m.get('train_last',''),"route_to":m.get('route_to',''),"turnus":str(ctd),"start":m.get('start',''),"end":m.get('end',''),"pc_start":m.get('pc_start',''),"pc_end":m.get('pc_end',''),"plan":m.get('plan',''),"pnp_start":m.get('pnp_start',''),"pnp_end":m.get('pnp_end',''),"meal_override":m.get('meal_override',''),"other_premiums":m.get('other_premiums',''),"note":""}
+                else: tp=PATTERN[(day-1)%len(PATTERN)]; itv=tp in ('Voľno',); sh={"uid":str(uuid.uuid4()),"date":ds,"shift_type":"T.V. (Turnus voľno)" if itv else "Štandardný výkon","train_first":"T.V." if itv else "","route_from":"","train_last":"T.V." if itv else "","route_to":"","turnus":str(ctd),"start":"","end":"","pc_start":"","pc_end":"","plan":"08:00" if not itv else "","pnp_start":"","pnp_end":"","meal_override":"","other_premiums":"","note":tp}
+                nm.append(sh)
+            keep.extend(nm); self.save_data(keep); self.refresh(); popup.dismiss(); self.show_info(f'Vygenerovaných {len(nm)} dní')
+        bg.bind(on_press=gen); btns.add_widget(bc); btns.add_widget(bg); root.add_widget(btns); popup.content=root; popup.open()
     def open_turnus_generator(self,*a): self.open_turnus_manager(*a)
-
     def get_download_dirs(self):
         ds=[self.user_data_dir]
         for p in ["/storage/emulated/0/Download","/sdcard/Download","./"]:
             if os.path.exists(p): ds.append(p)
         return ds
-
     def open_export_menu(self,*a):
-        popup=Popup(title='Import / Export zmien',size_hint=(0.92,None),height=dp(440),separator_color=self.theme['accent'])
-        box=BoxLayout(orientation='vertical',spacing=dp(8),padding=dp(12))
-        for txt,fn in [('Export CSV (aktuálny mesiac)',self.export_csv),('Export JSON záloha (všetko)',self.export_json),('Report TXT (ako PC)',self.export_report),('Import zmien z JSON',self.import_shifts_picker)]:
-            b=Button(text=txt,size_hint_y=None,height=dp(44),background_normal='',background_color=self.theme['btn_export'],font_size='12sp'); b.bind(on_press=lambda inst,f=fn: f()); box.add_widget(b)
-        bc=Button(text='Zavrieť',size_hint_y=None,height=dp(42),background_normal='',background_color=self.theme['btn_settings']); bc.bind(on_press=popup.dismiss); box.add_widget(bc); popup.content=box; popup.open()
-
+        pop=Popup(title='Import / Export zmien',size_hint=(0.92,None),height=dp(380),separator_color=self.theme['accent']); box=BoxLayout(orientation='vertical',spacing=dp(8),padding=dp(12))
+        for txt,fn in [('Export CSV (mesiac)',self.export_csv),('Export JSON záloha',self.export_json),('Report TXT',self.export_report),('Import zmien z JSON',self.import_shifts_picker)]:
+            b=Button(text=txt,size_hint_y=None,height=dp(42),background_normal='',background_color=self.theme['btn_export'],font_size='12sp'); b.bind(on_press=lambda inst,f=fn: f()); box.add_widget(b)
+        bc=Button(text='Zavrieť',size_hint_y=None,height=dp(40),background_normal='',background_color=self.theme['btn_settings']); bc.bind(on_press=pop.dismiss); box.add_widget(bc); pop.content=box; pop.open()
     def import_shifts_picker(self,*a):
         def on_pick(p):
             try:
@@ -382,41 +427,39 @@ class ZSSKApp(App):
                 if isinstance(data,dict) and 'shifts_data' in data: ns=data['shifts_data']
                 elif isinstance(data,list): ns=data
                 else: self.show_info('Neznámy formát'); return
-                ex=self.load_data(); added=0
+                ex=self.load_data(); ad=0
                 for s in ns:
                     if not isinstance(s,dict) or 'date' not in s: continue
                     if 'uid' not in s: s['uid']=str(uuid.uuid4())
-                    if not any(e['date']==s['date'] and e.get('start','')==s.get('start','') for e in ex): ex.append(s); added+=1
-                self.save_data(sorted(ex,key=lambda x:x.get('date',''))); self.refresh(); self.show_info(f'Import: {added} nových z {os.path.basename(p)}')
+                    if not any(e['date']==s['date'] and e.get('start','')==s.get('start','') for e in ex): ex.append(s); ad+=1
+                self.save_data(sorted(ex,key=lambda x:x.get('date',''))); self.refresh(); self.show_info(f'Import: {ad} nových')
             except Exception as e: self.show_info(f'Chyba: {e}')
         FilePickerPopup(self.get_download_dirs(), on_pick).open()
-
     def export_csv(self,*a):
         fn=f"zsskzmeny_{self.month_key()}.csv"; out=os.path.join(self.user_data_dir,fn)
         try:
             with open(out,'w',newline='',encoding='utf-8-sig') as f:
-                w=csv.writer(f); w.writerow(['datum','mzdovy_druh','turnus','nastup','koniec','plan','celkom','nocna','sobota','nedela','sviatok','stravne','poznamka'])
+                w=csv.writer(f); w.writerow(['datum','mzdovy_druh','turnus','nastup','koniec','plan','celkom','nocna','stravne','poznamka'])
                 for d in sorted(self.load_data(),key=lambda x:x.get('date','')):
                     if not d.get('date','').startswith(self.month_key()): continue
                     c=self.calculator.calculate_shift(d.get('date',''),d.get('start',''),d.get('end',''),d.get('plan',''),d.get('pc_start',''),d.get('pc_end',''),d.get('pnp_start',''),d.get('pnp_end',''),d.get('shift_type',''),d.get('meal_override',''),d.get('other_premiums',''))
-                    w.writerow([d.get('date'),d.get('shift_type'),d.get('turnus'),d.get('start'),d.get('end'),d.get('plan'),c.get('total_hours') if c else '',c.get('night_hours') if c else '',c.get('saturday_hours') if c else '',c.get('sunday_hours') if c else '',c.get('holiday_hours') if c else '',c.get('meal_allowance') if c else '',d.get('note','')])
+                    w.writerow([d.get('date'),d.get('shift_type'),d.get('turnus'),d.get('start'),d.get('end'),d.get('plan'),c.get('total_hours') if c else '',c.get('night_hours') if c else '',c.get('meal_allowance') if c else '',d.get('note','')])
             self.show_info(f'CSV: {out}')
         except Exception as e: self.show_info(f'Chyba: {e}')
     def export_json(self,*a):
         fn=f"zsskzmeny_all_{datetime.date.today().isoformat()}.json"; out=os.path.join(self.user_data_dir,fn)
         try:
-            with open(out,'w',encoding='utf-8') as f: json.dump({"employee_info":self.employee,"shifts_data":self.load_data(),"turnus":self.load_turnus_file()},f,ensure_ascii=False,indent=2); self.show_info(f'JSON záloha: {out}')
+            with open(out,'w',encoding='utf-8') as f: json.dump({"employee_info":self.employee,"shifts_data":self.load_data(),"turnus":self.load_turnus_file()},f,ensure_ascii=False,indent=2); self.show_info(f'JSON: {out}')
         except Exception as e: self.show_info(f'Chyba: {e}')
     def export_report(self,*a):
         fn=f"report_{self.month_key()}.txt"; out=os.path.join(self.user_data_dir,fn)
         try:
-            lines=[f"ZÁZNAM {self.month_key()} Norma {self.get_auto_norm_str()} Saldo {self.current_saldo//60:+d}:{(abs(self.current_saldo)%60):02d}","="*60]
+            lines=[f"ZÁZNAM {self.month_key()} Norma {self.get_auto_norm_str()} Saldo {getattr(self,'current_saldo',0)//60:+d}:{(abs(getattr(self,'current_saldo',0))%60):02d}","="*60]
             for d in sorted([x for x in self.load_data() if x.get('date','').startswith(self.month_key())],key=lambda x:x.get('date','')):
                 c=self.calculator.calculate_shift(d.get('date',''),d.get('start',''),d.get('end',''),d.get('plan',''),d.get('pc_start',''),d.get('pc_end',''),d.get('pnp_start',''),d.get('pnp_end',''),d.get('shift_type',''),d.get('meal_override',''),d.get('other_premiums',''))
                 lines.append(f"{d.get('date')} {d.get('shift_type')[:22]:22} {d.get('start',''):5}-{d.get('end',''):5} {c.get('total_hours','-') if c else '-':5} {d.get('note','')}")
             with open(out,'w',encoding='utf-8') as f: f.write("\n".join(lines)); self.show_info(f'Report: {out}')
         except Exception as e: self.show_info(f'Chyba: {e}')
-
     def open_month_picker(self,*a):
         temp=[self.cur_year]; pop=Popup(title='Vyber mesiac',size_hint=(0.92,None),height=dp(460),separator_color=self.theme['accent']); box=BoxLayout(orientation='vertical',spacing=dp(8),padding=dp(10))
         yb=BoxLayout(size_hint_y=None,height=dp(48),spacing=dp(8)); bm=Button(text='- rok',size_hint_x=None,width=dp(74),background_normal='',background_color=self.theme['btn_settings']); bp=Button(text='+ rok',size_hint_x=None,width=dp(74),background_normal='',background_color=self.theme['btn_settings']); ly=Label(text=str(temp[0]),font_size='17sp',bold=True,color=self.theme['text'])
@@ -429,7 +472,6 @@ class ZSSKApp(App):
             def cb(mm): return lambda inst: (setattr(self,'cur_year',temp[0]), setattr(self,'cur_month',mm), self.save_employee(), pop.dismiss(), self.refresh())
             b.bind(on_press=cb(m)); grid.add_widget(b)
         box.add_widget(grid); bc=Button(text='Zavrieť',size_hint_y=None,height=dp(42),background_normal='',background_color=self.theme['btn_settings']); bc.bind(on_press=pop.dismiss); box.add_widget(bc); pop.content=box; pop.open()
-
     def open_stats(self,*a):
         data=[d for d in self.load_data() if d.get('date','').startswith(self.month_key())]; cnt={}
         for d in data: k=d.get('shift_type','bez') or 'bez'; cnt[k]=cnt.get(k,0)+1
@@ -437,9 +479,8 @@ class ZSSKApp(App):
         if not cnt: gl.add_widget(Label(text='Žiadne dáta',size_hint_y=None,height=dp(30),color=self.theme['text']))
         else:
             for k in sorted(cnt): r=BoxLayout(size_hint_y=None,height=dp(34),spacing=dp(6)); r.add_widget(Label(text=k,size_hint_x=0.65,halign='left',font_size='11sp',color=self.theme['text'])); r.add_widget(Label(text=f"{cnt[k]}x",size_hint_x=0.35,halign='right',font_size='11sp',color=self.theme['subtext'])); gl.add_widget(r)
-            saldo=self.current_saldo if hasattr(self,'current_saldo') else 0; gl.add_widget(Label(text=f"Celkom {len(data)} zmien, saldo {saldo//60:+d}h {abs(saldo)%60:02d}m",size_hint_y=None,height=dp(32),bold=True,color=self.theme['text']))
+            saldo=getattr(self,'current_saldo',0); gl.add_widget(Label(text=f"Celkom {len(data)} zmien, saldo {saldo//60:+d}h {abs(saldo)%60:02d}m",size_hint_y=None,height=dp(32),bold=True,color=self.theme['text']))
         sc.add_widget(gl); root.add_widget(sc); b=Button(text='OK',size_hint_y=None,height=dp(42),background_normal='',background_color=self.theme['btn_stats']); b.bind(on_press=pop.dismiss); root.add_widget(b); pop.content=root; pop.open()
-
     def open_payroll(self,*a):
         t=self.current_totals; base=float(str(self.employee.get('base_salary','1484')).replace(',','.')) if self.employee.get('base_salary') else 1484.0; saldo=getattr(self,'current_saldo',0)
         try: auto=self.get_auto_norm_minutes(); hod=base/(auto/60) if auto else 9.27
@@ -452,36 +493,63 @@ class ZSSKApp(App):
         b=Button(text='Zavrieť',size_hint_y=None,height=dp(40),background_normal='',background_color=self.theme['btn_settings']); b.bind(on_press=pop.dismiss); box.add_widget(b); pop.content=box; pop.open()
 
     def open_settings(self,*a):
-        pop=Popup(title='⚙ Nastavenia',size_hint=(0.94,0.92),separator_color=self.theme['accent']); root=BoxLayout(orientation='vertical',spacing=dp(6),padding=dp(10)); scroll=ScrollView(); form=GridLayout(cols=1,spacing=dp(8),size_hint_y=None,padding=dp(2)); form.bind(minimum_height=form.setter('height'))
-        # Téma
+        pop=Popup(title='⚙ Nastavenia',size_hint=(0.94,0.94),separator_color=self.theme['accent']); root=BoxLayout(orientation='vertical',spacing=dp(6),padding=dp(10)); scroll=ScrollView(); form=GridLayout(cols=1,spacing=dp(8),size_hint_y=None,padding=dp(2)); form.bind(minimum_height=form.setter('height'))
         form.add_widget(Label(text='Farebná schéma',size_hint_y=None,height=dp(20),bold=True,color=self.theme['text'],halign='left'))
         sp_theme=Spinner(text=THEMES[self.theme_key]['name'],values=[v['name'] for v in THEMES.values()],size_hint_y=None,height=dp(42),background_normal='',background_color=self.theme['row_bg']); form.add_widget(sp_theme)
-        # Norma info
         auto_str=self.get_auto_norm_str(); days=calendar.monthrange(self.cur_year,self.cur_month)[1]
-        form.add_widget(Label(text=f'Automatická norma pre {self.month_key()}: {days} dní × 5:08 = {auto_str}\nSaldo = Odpracované - Norma ( + nad normu / - pod normu )',size_hint_y=None,height=dp(48),font_size='11sp',color=self.theme['subtext'],halign='left'))
-        # Zamestnanec
+        form.add_widget(Label(text=f'Norma pre {self.month_key()}: {days} dní × 5:08 = {auto_str}\nSaldo = Odprac - Norma ( + nad / - pod )',size_hint_y=None,height=dp(44),font_size='11sp',color=self.theme['subtext'],halign='left'))
         inputs={}
         for lbl,key,defv in [('Meno','name',''),('Os. číslo','id',''),('Základná mzda €','base_salary','1484.00')]:
             b=BoxLayout(orientation='vertical',size_hint_y=None,height=dp(62),spacing=dp(2)); b.add_widget(Label(text=lbl,size_hint_y=None,height=dp(18),font_size='11sp',color=self.theme['subtext'],halign='left')); ti=TextInput(text=str(self.employee.get(key,defv)),multiline=False,size_hint_y=None,height=dp(38),background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); inputs[key]=ti; b.add_widget(ti); form.add_widget(b)
-        # Oprav presunuté sem
         form.add_widget(Label(text='Údržba dát',size_hint_y=None,height=dp(24),bold=True,color=self.theme['text']))
-        b_oprav=Button(text='Oprav prázdne typy (doplní Ranná/Poobedná/Nočná/Voľno)',size_hint_y=None,height=dp(44),background_normal='',background_color=self.theme['btn_oprav'],font_size='11sp')
+        b_oprav=Button(text='Oprav prázdne typy (PATTERN)',size_hint_y=None,height=dp(42),background_normal='',background_color=self.theme['btn_oprav'],font_size='11sp')
         def do_oprav(*_):
             data=self.load_data(); ch=0
             for d in data:
                 if d.get('date','').startswith(self.month_key()) and not d.get('shift_type'):
                     try: day=int(d['date'].split('-')[2]); d['shift_type']=PATTERN[(day-1)%len(PATTERN)]; ch+=1
                     except: pass
-            self.save_data(data); self.refresh(); self.show_info(f'Opravených {ch} záznamov v {self.month_key()}\nPrázdne typy doplnené podľa vzoru 8-dňového cyklu.')
+            self.save_data(data); self.refresh(); self.show_info(f'Opravených {ch} záznamov')
         b_oprav.bind(on_press=do_oprav); form.add_widget(b_oprav)
-        form.add_widget(Label(text='Oprav nemenil existujúce záznamy, len dopĺňa prázdne. Použi ak si importoval staré dáta bez typu.',size_hint_y=None,height=dp(36),font_size='10sp',color=self.theme['subtext']))
+        # NOVÉ - nebezpečná zóna
+        form.add_widget(Label(text='Nebezpečná zóna',size_hint_y=None,height=dp(28),bold=True,color=self.theme['btn_danger']))
+        b_del_month=Button(text=f'🗑 Vymazať celý mesiac {self.month_key()}',size_hint_y=None,height=dp(44),background_normal='',background_color=self.theme['btn_danger'],font_size='11sp')
+        b_del_month.bind(on_press=lambda *x: (pop.dismiss(), self.delete_month_confirm())); form.add_widget(b_del_month)
+        b_del_all=Button(text='🗑 Vymazať VŠETKY zmeny (celá databáza)',size_hint_y=None,height=dp(44),background_normal='',background_color=self.theme['btn_danger'],font_size='11sp')
+        def del_all_confirm(*_):
+            pop.dismiss()
+            p2=Popup(title='Naozaj vymazať všetko?',size_hint=(0.90,None),height=dp(300),separator_color=self.theme['btn_danger']); b=BoxLayout(orientation='vertical',padding=dp(14),spacing=dp(10)); b.add_widget(Label(text='Vymaže sa celá databáza zmien (všetky mesiace).\nTurnusy ostanú zachované.\n\nPokračovať?',halign='center',color=self.theme['text']))
+            r=BoxLayout(size_hint_y=None,height=dp(48),spacing=dp(8)); b1=Button(text='Zrušiť',background_normal='',background_color=self.theme['btn_settings']); b2=Button(text='Áno, vymazať všetko',background_normal='',background_color=self.theme['btn_danger'],bold=True)
+            b1.bind(on_press=p2.dismiss)
+            def do_wipe(*_):
+                self.save_data([]); self.refresh(); p2.dismiss(); self.show_info('Všetky zmeny vymazané. Appka je prázdna.')
+            b2.bind(on_press=do_wipe); r.add_widget(b1); r.add_widget(b2); b.add_widget(r); p2.content=b; p2.open()
+        b_del_all.bind(on_press=del_all_confirm); form.add_widget(b_del_all)
+        b_reset=Button(text='♻ Reset aplikácie (vymaže zmeny + turnusy + nastavenia)',size_hint_y=None,height=dp(48),background_normal='',background_color=(0.55,0.05,0.05,1),font_size='11sp',bold=True)
+        def reset_confirm(*_):
+            pop.dismiss()
+            p3=Popup(title='RESET APLIKÁCIE',size_hint=(0.92,None),height=dp(340),separator_color=(0.55,0.05,0.05,1)); b=BoxLayout(orientation='vertical',padding=dp(14),spacing=dp(10)); b.add_widget(Label(text='Toto vymaže:\n• všetky zmeny\n• všetky turnusové profily\n• nastavenia (okrem témy)\n\nAppka bude ako po novej inštalácii.\n\nNaozaj?',halign='left',color=self.theme['text'],font_size='12sp'))
+            r=BoxLayout(size_hint_y=None,height=dp(50),spacing=dp(8)); b1=Button(text='Zrušiť',background_normal='',background_color=self.theme['btn_settings']); b2=Button(text='RESET',background_normal='',background_color=(0.55,0.05,0.05,1),bold=True)
+            b1.bind(on_press=p3.dismiss)
+            def do_reset(*_):
+                try:
+                    with open(self.data_file,'w',encoding='utf-8') as f: json.dump([],f)
+                    with open(self.turnus_file,'w',encoding='utf-8') as f: json.dump({"active":"Leto 2026","profiles":{"Leto 2026":[]}},f,ensure_ascii=False,indent=2)
+                    # zachovaj tému
+                    theme=self.theme_key
+                    self.employee={"name":"","id":"","base_salary":"1484.00","theme":theme,"cur_year":datetime.date.today().year,"cur_month":datetime.date.today().month}
+                    self.save_employee(); self.cur_year=datetime.date.today().year; self.cur_month=datetime.date.today().month; self.selected_uids.clear(); self.select_mode=False
+                    self.refresh(); p3.dismiss(); self.show_info('Aplikácia resetovaná do továrneho stavu.')
+                except Exception as e: self.show_info(f'Chyba resetu: {e}')
+            b2.bind(on_press=do_reset); r.add_widget(b1); r.add_widget(b2); b.add_widget(r); p3.content=b; p3.open()
+        b_reset.bind(on_press=reset_confirm); form.add_widget(b_reset)
         scroll.add_widget(form); root.add_widget(scroll)
         btns=BoxLayout(size_hint_y=None,height=dp(46),spacing=dp(6)); bc=Button(text='Zrušiť',background_normal='',background_color=self.theme['btn_settings']); bs=Button(text='Uložiť',background_normal='',background_color=self.theme['btn_save'],bold=True)
         def save(*_):
             for k,v in THEMES.items():
                 if v['name']==sp_theme.text: self.theme_key=k; break
             for k,ti in inputs.items(): self.employee[k]=ti.text
-            self.save_employee(); pop.dismiss(); self.show_info(f'Uložené. Téma {THEMES[self.theme_key]["name"]} sa plne prejaví po reštarte.')
+            self.save_employee(); pop.dismiss(); self.show_info(f'Uložené. Téma {THEMES[self.theme_key]["name"]} sa prejaví po reštarte.')
         bc.bind(on_press=pop.dismiss); bs.bind(on_press=save); btns.add_widget(bc); btns.add_widget(bs); root.add_widget(btns); pop.content=root; pop.open()
 
     def show_info(self,msg):
