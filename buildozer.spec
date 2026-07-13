@@ -7,7 +7,9 @@ source.include_exts = py,png,jpg,kv,atlas,json
 source.main = main.py
 
 version = 8.0
-requirements = python3,kivy
+requirements = python3,kivy,plyer
+android.permissions = INTERNET,READ_EXTERNAL_STORAGE
+android.api = 33
 
 # OPRAVA: buildozer 1.5.0 neberie "sensor" ako validnú hodnotu
 # Pre max kompatibilitu mobil + tablet nechaj portrait
