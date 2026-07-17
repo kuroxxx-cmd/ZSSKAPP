@@ -6,14 +6,9 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json
 source.main = main.py
 
-version = 8.0
-requirements = python3,kivy,plyer
-android.permissions = INTERNET,READ_EXTERNAL_STORAGE
-android.api = 33
+version = 13.0
+requirements = python3,kivy,plyer,androidstorage4kivy
 
-# OPRAVA: buildozer 1.5.0 neberie "sensor" ako validnú hodnotu
-# Pre max kompatibilitu mobil + tablet nechaj portrait
-# alebo ak chceš rotáciu na tablete, zmeň na "all" alebo vymaž celý riadok
 orientation = portrait
 fullscreen = 0
 
@@ -30,9 +25,11 @@ android.ndk = 25b
 android.build_tools = 33.0.2
 android.accept_sdk_license = True
 
+# Pre file manager na Android 13+
+android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_MEDIA_IMAGES,READ_MEDIA_VIDEO
+# Aby plyer mohol otvoriť systémový picker
+android.manifest.intent_filters = 
+
 p4a.fork = kivy
 p4a.branch = master
 p4a.bootstrap = sdl2
-
-android.permissions = INTERNET
-android.allow_backup = True
