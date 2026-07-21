@@ -1,4 +1,4 @@
-import json, os, datetime, calendar, uuid, csv
+import json, os, datetime, calendar, uuid, csv, sys
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
@@ -25,8 +25,7 @@ SK_SVIATKY_FIX={"01-01","01-06","05-01","05-08","07-05","08-29","09-01","09-15",
 WEEKDAYS_SK=['Pon','Uto','Str','Štv','Pia','Sob','Ned']
 
 def format_date_display(iso_date):
-    try:
-        y,m,d=iso_date.split('-'); return f"{int(d)}-{int(m)}-{y}"
+    try: y,m,d=iso_date.split('-'); return f"{int(d)}-{int(m)}-{y}"
     except: return iso_date
 
 def format_date_with_weekday(iso_date, turnus=''):
@@ -38,11 +37,57 @@ def format_date_with_weekday(iso_date, turnus=''):
         else: return f"{short} {wd}"
     except: return iso_date
 
+def find_bundled_data():
+    """Nájde data.json alebo bbbbbb.json priamo v APK - hľadá v aktuálnom priečinku appky"""
+    candidates=[]
+    # 1. priamo vedľa main.py (keď je v APK zabalený)
+    base_dirs=[os.getcwd(), os.path.dirname(__file__), os.path.dirname(os.path.abspath(__file__)), ".", "./ZSSKAPP"]
+    # Kivy na Android dáva súbory do app root
+    try:
+        from kivy.utils import platform
+        if platform=='android':
+            from android.storage import app_storage_path
+            base_dirs.append(app_storage_path())
+            # app private + assets
+            base_dirs.append("/data/data/org.zssk.zsskzmeny/files/app")
+    except: pass
+    for bd in base_dirs:
+        for name in ["data.json", "bbbbbb.json", "zssk_data.json", "bundle_data.json"]:
+            p=os.path.join(bd, name)
+            if os.path.exists(p) and os.path.isfile(p):
+                candidates.append(p)
+    # deduplikuj
+    seen=set(); uniq=[]
+    for c in candidates:
+        if c not in seen:
+            seen.add(c); uniq.append(c)
+    return uniq
+
+def load_bundled_json_file(path):
+    """Načíta JSON či už je list (data.json) alebo dict s shifts_data (bbbbbb.json)"""
+    try:
+        with open(path,'r',encoding='utf-8') as f:
+            data=json.load(f)
+        if isinstance(data,list):
+            return {"shifts_data": data, "turnus": None, "source": path}
+        elif isinstance(data,dict):
+            # bbbbbb.json formát: employee_info, shifts_data, turnus_data
+            shifts=data.get('shifts_data') or data.get('shifts') or data.get('data') or []
+            turnus=data.get('turnus_data') or data.get('turnus') or data.get('turnus_profiles') or None
+            # niekedy je turnus dict s profiles
+            if isinstance(turnus, dict) and 'profiles' in turnus:
+                turnus_obj=turnus
+            elif isinstance(turnus, list):
+                turnus_obj={"active":"Import","profiles":{"Import":turnus}}
+            else:
+                turnus_obj=None
+            return {"shifts_data": shifts, "turnus": turnus_obj, "employee": data.get('employee_info'), "source": path}
+    except Exception as e:
+        print(f"Chyba načítania bundled {path}: {e}")
+    return None
+
 def safe_read_any_path(path_or_uri):
-    """Vráti textový obsah súboru - zvláda normálnu cestu aj content:// URI z Android SAF"""
-    if not path_or_uri:
-        raise Exception("Prázdna cesta")
-    # 1. content:// - Android Storage Access Framework
+    if not path_or_uri: raise Exception("Prázdna cesta")
     if str(path_or_uri).startswith("content://"):
         try:
             from jnius import autoclass
@@ -64,10 +109,8 @@ def safe_read_any_path(path_or_uri):
             return "\n".join(sb)
         except Exception as e:
             raise Exception(f"Chyba čítania content:// URI: {e}")
-    # 2. normálna cesta - skontroluj či nie je adresár
     if os.path.isdir(path_or_uri):
-        raise IsADirectoryError(f"Vybral si priečinok, nie súbor: {path_or_uri}\nKlikni na súbor s koncovkou .json")
-    # 3. normálny súbor
+        raise IsADirectoryError(f"Vybral si priečinok, nie súbor: {path_or_uri}")
     with open(path_or_uri,'r',encoding='utf-8') as f:
         return f.read()
 
@@ -146,7 +189,7 @@ class TextImportPopup(Popup):
     def __init__(self, callback, **kw):
         super().__init__(**kw); self.callback=callback; self.title="Import z textu / schránky - FUNGUJE VŽDY"; self.size_hint=(0.96,0.92); self.separator_color=(0.2,0.6,0.9,1)
         root=BoxLayout(orientation='vertical',spacing=dp(8),padding=dp(10))
-        root.add_widget(Label(text='POSTUP:\n1. Otvor JSON v mobile (Total Commander → Otvoriť ako → Text)\n2. Kopírovať všetko\n3. Tu Vložiť zo schránky → Import',font_size='11sp',color=(0.8,0.9,1,1),size_hint_y=None,height=dp(62),halign='left'))
+        root.add_widget(Label(text='POSTUP:\n1. Otvor JSON v mobile (QuickEdit)\n2. Kopírovať všetko\n3. Tu Vložiť zo schránky → Import',font_size='11sp',color=(0.8,0.9,1,1),size_hint_y=None,height=dp(62),halign='left'))
         self.inp=TextInput(hint_text='Sem vlož obsah JSON...',multiline=True,font_size='10sp'); root.add_widget(self.inp)
         row=BoxLayout(size_hint_y=None,height=dp(46),spacing=dp(6))
         b_paste=Button(text='📋 Vložiť zo schránky',background_normal='',background_color=(0.2,0.45,0.65,1),font_size='11sp')
@@ -174,7 +217,6 @@ class FilePickerPopup(Popup):
             self.has_plyer=True; self.plyer_fc=plyer_fc
         except: self.has_plyer=False
         self.build_ui(); self.refresh_list()
-
     def build_ui(self):
         root=BoxLayout(orientation='vertical',spacing=dp(6),padding=dp(8))
         self.lbl_path=Label(text=self.current_dir,size_hint_y=None,height=dp(28),font_size='10sp',color=(0.7,0.7,0.7,1),halign='left',text_size=(dp(340),None)); root.add_widget(self.lbl_path)
@@ -185,7 +227,6 @@ class FilePickerPopup(Popup):
         btns=BoxLayout(size_hint_y=None,height=dp(46),spacing=dp(6)); b_up=Button(text='⬆ Vyššie',size_hint_x=0.33,background_normal='',background_color=(0.35,0.35,0.4,1),font_size='11sp'); b_sys=Button(text='📁 Systémový výber',size_hint_x=0.34,background_normal='',background_color=(0.15,0.38,0.68,1),font_size='11sp',bold=True); b_internal=Button(text='📁 App priečinok',size_hint_x=0.33,background_normal='',background_color=(0.18,0.55,0.32,1),font_size='10sp')
         b_up.bind(on_press=lambda *_: self.go_up()); b_sys.bind(on_press=self.open_system_picker); b_internal.bind(on_press=self.go_app_folder); btns.add_widget(b_up); btns.add_widget(b_sys); btns.add_widget(b_internal); root.add_widget(btns)
         bc=Button(text='Zavrieť',size_hint_y=None,height=dp(42),background_normal='',background_color=(0.36,0.36,0.38,1)); bc.bind(on_press=self.dismiss); root.add_widget(bc); self.content=root
-
     def refresh_list(self):
         self.grid.clear_widgets(); self.lbl_path.text=self.current_dir
         try: entries=os.listdir(self.current_dir)
@@ -203,30 +244,23 @@ class FilePickerPopup(Popup):
             b=Button(text=f'📄 {f}',size_hint_y=None,height=dp(42),background_normal='',background_color=(0.18,0.32,0.52,1),halign='left',font_size='11sp'); b.bind(on_press=lambda inst,fn=f: self.select_file(fn)); self.grid.add_widget(b)
         if not dirs and not files:
             self.grid.add_widget(Label(text='Prázdny priečinok\nAndroid 13+ blokuje Download\nPouži 📁 Systémový výber',size_hint_y=None,height=dp(70),color=(1,0.8,0.4,1)))
-
     def enter_dir(self,dirname): self.current_dir=os.path.join(self.current_dir,dirname); self.refresh_list()
     def go_up(self):
         parent=os.path.dirname(self.current_dir.rstrip('/'))
         if parent and os.path.exists(parent): self.current_dir=parent; self.refresh_list()
     def go_app_folder(self,*a):
-        # app private folder vždy viditeľný
-        from kivy.utils import platform
-        if platform=='android':
-            try:
-                from android.storage import app_storage_path
-                self.current_dir=app_storage_path(); self.refresh_list(); return
-            except: pass
-        # fallback
+        try:
+            from android.storage import app_storage_path
+            self.current_dir=app_storage_path(); self.refresh_list(); return
+        except: pass
         self.current_dir=self.start_dirs[0] if self.start_dirs else "."; self.refresh_list()
     def select_file(self,filename):
         full=os.path.join(self.current_dir,filename)
-        # OPRAVA: skontroluj či nie je adresár
         if os.path.isdir(full):
             self.current_dir=full; self.refresh_list(); return
         try:
             text=safe_read_any_path(full)
             data=json.loads(text) if full.endswith('.json') else text
-            # ak je to JSON string, parse
             if isinstance(data,str):
                 try: data=json.loads(data)
                 except: pass
@@ -235,7 +269,6 @@ class FilePickerPopup(Popup):
         except IsADirectoryError as e:
             self.grid.clear_widgets(); self.grid.add_widget(Label(text=str(e),size_hint_y=None,height=dp(60),color=(1,0.6,0.6,1)))
         except Exception as e:
-            # skús aspoň zavolať callback s cestou
             try: self.callback_data(None, full)
             except: pass
             print(f"Chyba čítania súboru {full}: {e}")
@@ -248,12 +281,10 @@ class FilePickerPopup(Popup):
             except Exception as e: print(e)
     def open_system_picker(self,*a):
         if not self.has_plyer:
-            # skús aspoň Download cez app_storage
             for d in ["/storage/emulated/0/Download","/sdcard/Download"]:
                 if os.path.exists(d): self.current_dir=d; self.refresh_list(); return
             return
         try:
-            # plyer vráti list content:// URI
             self.plyer_fc.open_file(on_selection=self.on_plyer_select, filters=["*.json","*/*"])
         except Exception as e:
             print(f"plyer chyba: {e}")
@@ -268,13 +299,11 @@ class FilePickerPopup(Popup):
                 return
             except Exception as e:
                 print(f"Chyba čítania URI {uri}: {e}")
-                # skús aj priamo
                 try: self.callback_data(None, uri); self.dismiss(); return
                 except: pass
 
 class ZSSKApp(App):
     def build(self):
-        # Požiadaj o permission hneď na štarte
         try:
             from android.permissions import request_permissions, Permission
             request_permissions([Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE, Permission.READ_MEDIA_IMAGES])
@@ -311,6 +340,8 @@ class ZSSKApp(App):
         self.bulk_bar=BoxLayout(size_hint_y=None,height=dp(0),spacing=dp(6),padding=dp(3),opacity=0)
         self.btn_bulk_del=Button(text='🗑 Zmazať označené (0)',background_normal='',background_color=self.theme['btn_danger'],font_size='12sp'); self.btn_bulk_month=Button(text='🗑 Vymazať mesiac',size_hint_x=None,width=dp(140),background_normal='',background_color=self.theme['btn_danger'],font_size='11sp'); self.btn_bulk_cancel=Button(text='Zrušiť výber',size_hint_x=None,width=dp(100),background_normal='',background_color=self.theme['btn_settings'],font_size='11sp')
         self.btn_bulk_del.bind(on_press=self.delete_selected_confirm); self.btn_bulk_month.bind(on_press=self.delete_month_confirm); self.btn_bulk_cancel.bind(on_press=self.toggle_select_mode); self.bulk_bar.add_widget(self.btn_bulk_del); self.bulk_bar.add_widget(self.btn_bulk_month); self.bulk_bar.add_widget(self.btn_bulk_cancel); root.add_widget(self.bulk_bar)
+        # po build skús načítať vstavané dáta
+        self.check_bundled_data()
         self.refresh(); return root
 
     def _ensure_files(self):
@@ -321,6 +352,63 @@ class ZSSKApp(App):
             with open(self.turnus_file,'w',encoding='utf-8') as f: json.dump({"active":"Leto 2026","profiles":{"Leto 2026":[]}},f,ensure_ascii=False,indent=2)
         if not os.path.exists(self.emp_file):
             with open(self.emp_file,'w',encoding='utf-8') as f: json.dump({"name":"Miroslav Kurek","id":"20 814","role":"Rušňovodič","base_salary":"1484.00","theme":"tmava","cur_year":datetime.date.today().year,"cur_month":datetime.date.today().month},f,ensure_ascii=False,indent=2)
+
+    def check_bundled_data(self):
+        """Ak existuje data.json alebo bbbbbb.json v APK, naimportuj ho pri prvom spustení alebo ak je väčší"""
+        try:
+            bundled_files=find_bundled_data()
+            if not bundled_files: return
+            # načítaj aktuálne dáta v user_data
+            current=self.load_data()
+            for bf in bundled_files:
+                bdata=load_bundled_json_file(bf)
+                if not bdata: continue
+                shifts=bdata.get('shifts_data',[])
+                if not shifts: continue
+                # ak je user_data prázdny alebo bundled má viac záznamov, spýtaj sa
+                if len(current)==0 or len(shifts) > len(current):
+                    # automaticky naimportuj bez pýtania pri prvom spustení
+                    if len(current)==0:
+                        self.save_data(shifts)
+                        if bdata.get('turnus'):
+                            self.save_turnus_file(bdata['turnus'])
+                        self.show_info(f"Načítané vstavané dáta z APK:\n{os.path.basename(bf)}\n{len(shifts)} záznamov")
+                        return
+        except Exception as e:
+            print(f"check_bundled_data chyba: {e}")
+
+    def load_bundled_forced(self):
+        """Vynútené načítanie vstavaných dát z APK - volá sa z nastavení"""
+        bundled_files=find_bundled_data()
+        if not bundled_files:
+            self.show_info("V APK sa nenašiel žiadny data.json ani bbbbbb.json\nUisti sa že data.json je v repozitári vedľa main.py")
+            return
+        # ak je viac súborov, vezmi najväčší
+        best=None; best_len=0
+        for bf in bundled_files:
+            bd=load_bundled_json_file(bf)
+            if bd and len(bd.get('shifts_data',[]))>best_len:
+                best=bd; best_len=len(bd.get('shifts_data',[]))
+        if not best:
+            self.show_info("Bundled súbory sú prázdne")
+            return
+        # potvrdenie
+        pop=Popup(title='Načítať vstavané dáta z APK?',size_hint=(0.90,None),height=dp(340),separator_color=self.theme['accent'])
+        box=BoxLayout(orientation='vertical',padding=dp(14),spacing=dp(10))
+        box.add_widget(Label(text=f"Našiel sa súbor:\n{best.get('source')}\n{best_len} záznamov\n\nChceš PREPÍSAŤ aktuálne dáta v aplikácii týmito vstavanými?\n\nToto je presne to čo chceš po kompilácii s novým data.json",halign='center',color=self.theme['text'],font_size='11sp'))
+        row=BoxLayout(size_hint_y=None,height=dp(48),spacing=dp(8))
+        b1=Button(text='Zrušiť',background_normal='',background_color=self.theme['btn_settings'])
+        b2=Button(text=f'Áno, načítať {best_len}',background_normal='',background_color=self.theme['btn_save'],bold=True)
+        b1.bind(on_press=pop.dismiss)
+        def do_load(*_):
+            self.save_data(best.get('shifts_data',[]))
+            if best.get('turnus'):
+                self.save_turnus_file(best['turnus'])
+            self.refresh()
+            pop.dismiss()
+            self.show_info(f"Načítaných {best_len} záznamov z APK")
+        b2.bind(on_press=do_load)
+        row.add_widget(b1); row.add_widget(b2); box.add_widget(row); pop.content=box; pop.open()
 
     def load_data(self):
         try:
@@ -443,7 +531,7 @@ class ZSSKApp(App):
         self.lbl_kpi_night.text=f"Nočná:{fmt(totals['night'])}\nSo:{fmt(totals['sat'])} Ne:{fmt(totals['sun'])}"
         self.lbl_kpi_meal.text=f"Sviatok:{fmt(totals['hol'])} PNP:{fmt(totals['pnp'])}\nStravné:{totals['meal']:.2f}€"
         self.current_totals=totals; self.current_saldo=saldo
-        if not self.select_mode: self.lbl_info.text=f'{len(month_data)} záznamov • formát D-M-RR deň TD • klik pre úpravu'
+        if not self.select_mode: self.lbl_info.text=f'{len(month_data)} záznamov • {format_date_with_weekday.__name__}'
 
     def open_editor(self,uid=None):
         if self.select_mode:
@@ -525,9 +613,9 @@ class ZSSKApp(App):
         def do_exp(*_):
             tf=self.load_turnus_file(); out=os.path.join(self.user_data_dir,f"turnus_{tf.get('active','profil')}.json")
             try:
-                with open(out,'w',encoding='utf-8') as f: json.dump(tf,f,ensure_ascii=False,indent=2); self.show_info(f'Export: {out}\nAk nevidíš súbor, otvor Export JSON a skopíruj obsah ručne cez textový editor.')
+                with open(out,'w',encoding='utf-8') as f: json.dump(tf,f,ensure_ascii=False,indent=2); self.show_info(f'Export: {out}')
             except Exception as e: self.show_info(f'Chyba: {e}')
-        b_imp.bind(on_press=do_imp); b_imp_t.bind(on_press=do_imp_text); b_exp.bind(on_press=do_exp); row_ie.add_widget(b_imp); row_ie.add_widget(b_imp_t); row_ie.add_widget(b_exp); box_ie.add_widget(row_ie); box_ie.add_widget(Label(text='Ak Download prázdny, použi 📋 Z textu\n100% obchádza Android permission',size_hint_y=None,height=dp(36),font_size='10sp',color=self.theme['subtext'])); form.add_widget(box_ie)
+        b_imp.bind(on_press=do_imp); b_imp_t.bind(on_press=do_imp_text); b_exp.bind(on_press=do_exp); row_ie.add_widget(b_imp); row_ie.add_widget(b_imp_t); row_ie.add_widget(b_exp); box_ie.add_widget(row_ie); box_ie.add_widget(Label(text='Ak Download prázdny, použi 📋 Z textu',size_hint_y=None,height=dp(36),font_size='10sp',color=self.theme['subtext'])); form.add_widget(box_ie)
         lbl=Label(text='',size_hint_y=None,height=dp(20),font_size='11sp',color=self.theme['subtext']); form.add_widget(lbl); scroll.add_widget(form); root.add_widget(scroll)
         btns=BoxLayout(size_hint_y=None,height=dp(50),spacing=dp(6)); bc=Button(text='Zavrieť',background_normal='',background_color=self.theme['btn_settings']); bg=Button(text='⚙ Generovať mesiac',background_normal='',background_color=self.theme['btn_oprav'],bold=True); bc.bind(on_press=popup.dismiss)
         def gen(*_):
@@ -576,10 +664,8 @@ class ZSSKApp(App):
 
     def import_shifts_picker(self,*a):
         def on_data(data, path):
-            # data už môže byť načítaný JSON
             try:
                 if data is None:
-                    # path je content:// alebo súbor - skús načítať
                     text=safe_read_any_path(path)
                     data=json.loads(text)
                 if isinstance(data,dict) and 'shifts_data' in data: ns=data['shifts_data']
@@ -606,12 +692,12 @@ class ZSSKApp(App):
                     dt=datetime.datetime.strptime(d.get('date'),"%Y-%m-%d").date() if d.get('date') else None
                     wd=WEEKDAYS_SK[dt.weekday()] if dt else ''
                     w.writerow([d.get('date'),format_date_display(d.get('date','')),wd,d.get('turnus'),d.get('shift_type'),d.get('start'),d.get('end'),c.get('total_hours') if c else '',d.get('note','')])
-            self.show_info(f'CSV:\n{out}\nAk súbor nevidíš, použi Export JSON a skopíruj text.')
+            self.show_info(f'CSV:\n{out}')
         except Exception as e: self.show_info(f'Chyba: {e}')
     def export_json(self,*a):
         fn=f"zsskzmeny_all_{datetime.date.today().isoformat()}.json"; out=os.path.join(self.user_data_dir,fn)
         try:
-            with open(out,'w',encoding='utf-8') as f: json.dump({"employee_info":self.employee,"shifts_data":self.load_data(),"turnus":self.load_turnus_file()},f,ensure_ascii=False,indent=2); self.show_info(f'JSON záloha:\n{out}\nAk nevidíš súbor, otvor ho v textovom editore a skopíruj obsah do schránky - potom Import z textu.')
+            with open(out,'w',encoding='utf-8') as f: json.dump({"employee_info":self.employee,"shifts_data":self.load_data(),"turnus":self.load_turnus_file()},f,ensure_ascii=False,indent=2); self.show_info(f'JSON záloha:\n{out}')
         except Exception as e: self.show_info(f'Chyba: {e}')
     def export_report(self,*a):
         fn=f"report_{self.month_key()}.txt"; out=os.path.join(self.user_data_dir,fn)
@@ -655,11 +741,22 @@ class ZSSKApp(App):
             box.add_widget(Label(text=txt,font_size='12sp',halign='left',size_hint_y=None,height=dp(24),color=self.theme['text']))
         b=Button(text='Zavrieť',size_hint_y=None,height=dp(40),background_normal='',background_color=self.theme['btn_settings']); b.bind(on_press=pop.dismiss); box.add_widget(b); pop.content=box; pop.open()
     def open_settings(self,*a):
-        pop=Popup(title='⚙ Nastavenia',size_hint=(0.94,0.94),separator_color=self.theme['accent']); root=BoxLayout(orientation='vertical',spacing=dp(6),padding=dp(10)); scroll=ScrollView(); form=GridLayout(cols=1,spacing=dp(8),size_hint_y=None,padding=dp(2)); form.bind(minimum_height=form.setter('height'))
+        pop=Popup(title='⚙ Nastavenia - v15 s vstavanými dátami',size_hint=(0.96,0.96),separator_color=self.theme['accent']); root=BoxLayout(orientation='vertical',spacing=dp(6),padding=dp(10)); scroll=ScrollView(); form=GridLayout(cols=1,spacing=dp(8),size_hint_y=None,padding=dp(2)); form.bind(minimum_height=form.setter('height'))
         form.add_widget(Label(text='Farebná schéma',size_hint_y=None,height=dp(20),bold=True,color=self.theme['text'],halign='left'))
         sp_theme=Spinner(text=THEMES[self.theme_key]['name'],values=[v['name'] for v in THEMES.values()],size_hint_y=None,height=dp(42),background_normal='',background_color=self.theme['row_bg']); form.add_widget(sp_theme)
         auto_str=self.get_auto_norm_str(); days=calendar.monthrange(self.cur_year,self.cur_month)[1]
         form.add_widget(Label(text=f'Norma pre {self.month_key()}: {days}×5:08={auto_str}\nDovolenka 5:08/deň znižuje normu.',size_hint_y=None,height=dp(44),font_size='11sp',color=self.theme['subtext'],halign='left'))
+        # NOVÉ - Vstavané dáta
+        form.add_widget(Label(text='Vstavané dáta z APK (tvoj data.json)',size_hint_y=None,height=dp(24),bold=True,color=self.theme['accent']))
+        bundled=find_bundled_data()
+        if bundled:
+            info="\n".join([f"• {os.path.basename(p)} ({os.path.getsize(p)//1024}kB)" for p in bundled[:3]])
+            form.add_widget(Label(text=f"Nájdené v APK:\n{info}",size_hint_y=None,height=dp(60),font_size='10sp',color=self.theme['text'],halign='left'))
+        else:
+            form.add_widget(Label(text="V APK nie je data.json - pridaj data.json vedľa main.py v GitHub a skompiluj",size_hint_y=None,height=dp(40),font_size='10sp',color=self.theme['subtext']))
+        b_load_bundle=Button(text='📥 Načítať vstavané dáta z APK (prepíše aktuálne)',size_hint_y=None,height=dp(48),background_normal='',background_color=self.theme['btn_primary'],font_size='11sp',bold=True)
+        b_load_bundle.bind(on_press=lambda *_: (pop.dismiss(), self.load_bundled_forced())); form.add_widget(b_load_bundle)
+
         inputs={}
         for lbl,key,defv in [('Meno','name',''),('Os. číslo','id',''),('Základná mzda €','base_salary','1484.00')]:
             b=BoxLayout(orientation='vertical',size_hint_y=None,height=dp(62),spacing=dp(2)); b.add_widget(Label(text=lbl,size_hint_y=None,height=dp(18),font_size='11sp',color=self.theme['subtext'],halign='left')); ti=TextInput(text=str(self.employee.get(key,defv)),multiline=False,size_hint_y=None,height=dp(38),background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); inputs[key]=ti; b.add_widget(ti); form.add_widget(b)
@@ -701,6 +798,6 @@ class ZSSKApp(App):
             self.save_employee(); pop.dismiss(); self.show_info(f'Uložené. Téma po reštarte.')
         bc.bind(on_press=pop.dismiss); bs.bind(on_press=save); btns.add_widget(bc); btns.add_widget(bs); root.add_widget(btns); pop.content=root; pop.open()
     def show_info(self,msg):
-        p=Popup(title='Info',size_hint=(0.88,None),height=dp(360)); b=BoxLayout(orientation='vertical',padding=dp(12),spacing=dp(8)); b.add_widget(Label(text=msg,halign='center',color=self.theme['text'],font_size='12sp')); btn=Button(text='OK',size_hint_y=None,height=dp(42),background_normal='',background_color=self.theme['btn_settings']); btn.bind(on_press=p.dismiss); b.add_widget(btn); p.content=b; p.open()
+        p=Popup(title='Info',size_hint=(0.88,None),height=dp(380)); b=BoxLayout(orientation='vertical',padding=dp(12),spacing=dp(8)); b.add_widget(Label(text=msg,halign='center',color=self.theme['text'],font_size='12sp')); btn=Button(text='OK',size_hint_y=None,height=dp(42),background_normal='',background_color=self.theme['btn_settings']); btn.bind(on_press=p.dismiss); b.add_widget(btn); p.content=b; p.open()
 
 if __name__=='__main__': ZSSKApp().run()
