@@ -12,6 +12,16 @@ from kivy.metrics import dp
 from kivy.graphics import Color, Rectangle
 from kivy.core.clipboard import Clipboard
 
+# --- NOVÉ IMPORTY PRE OBRAZOVKY ---
+from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition
+
+# --- DEFINÍCIA OBRAZOVIEK ---
+class MainScreen(Screen):
+    pass
+
+class EditorScreen(Screen):
+    pass
+
 THEMES = {
     'tmava': {'name':'Tmavá','bg':(0.07,0.09,0.14,1),'header_bg':(0.12,0.16,0.22,1),'card_bg':(0.14,0.18,0.26,1),'row_bg':(0.20,0.22,0.28,1),'input_bg':(0.18,0.20,0.28,1),'input_fg':(1,1,1,1),'text':(0.96,0.97,0.99,1),'subtext':(0.62,0.70,0.82,1),'accent':(0.15,0.55,0.85,1),'btn_mesiac':(0.32,0.34,0.40,1),'btn_turnus':(0.55,0.32,0.18,1),'btn_stats':(0.18,0.45,0.32,1),'btn_export':(0.15,0.38,0.68,1),'btn_settings':(0.38,0.38,0.42,1),'btn_primary':(0,0.42,0.78,1),'btn_save':(0.12,0.55,0.25,1),'btn_oprav':(0.68,0.42,0.12,1),'btn_danger':(0.78,0.18,0.18,1),},
     'zssk': {'name':'ZSSK / PROSOFT svetlá','bg':(0.96,0.96,0.96,1),'header_bg':(0.90,0.31,0.0,1),'card_bg':(1,1,1,1),'row_bg':(0.92,0.92,0.94,1),'input_bg':(1,1,1,1),'input_fg':(0.15,0.15,0.15,1),'text':(0.13,0.13,0.15,1),'subtext':(0.45,0.48,0.55,1),'accent':(0.90,0.31,0.0,1),'btn_mesiac':(0.35,0.36,0.40,1),'btn_turnus':(0.90,0.31,0.0,1),'btn_stats':(0.20,0.60,0.30,1),'btn_export':(0.12,0.42,0.75,1),'btn_settings':(0.45,0.46,0.50,1),'btn_primary':(0.90,0.31,0.0,1),'btn_save':(0.18,0.58,0.24,1),'btn_oprav':(0.92,0.58,0.05,1),'btn_danger':(0.85,0.20,0.20,1),}
@@ -38,17 +48,13 @@ def format_date_with_weekday(iso_date, turnus=''):
     except: return iso_date
 
 def find_bundled_data():
-    """Nájde data.json alebo bbbbbb.json priamo v APK - hľadá v aktuálnom priečinku appky"""
     candidates=[]
-    # 1. priamo vedľa main.py (keď je v APK zabalený)
     base_dirs=[os.getcwd(), os.path.dirname(__file__), os.path.dirname(os.path.abspath(__file__)), ".", "./ZSSKAPP"]
-    # Kivy na Android dáva súbory do app root
     try:
         from kivy.utils import platform
         if platform=='android':
             from android.storage import app_storage_path
             base_dirs.append(app_storage_path())
-            # app private + assets
             base_dirs.append("/data/data/org.zssk.zsskzmeny/files/app")
     except: pass
     for bd in base_dirs:
@@ -56,7 +62,6 @@ def find_bundled_data():
             p=os.path.join(bd, name)
             if os.path.exists(p) and os.path.isfile(p):
                 candidates.append(p)
-    # deduplikuj
     seen=set(); uniq=[]
     for c in candidates:
         if c not in seen:
@@ -64,17 +69,14 @@ def find_bundled_data():
     return uniq
 
 def load_bundled_json_file(path):
-    """Načíta JSON či už je list (data.json) alebo dict s shifts_data (bbbbbb.json)"""
     try:
         with open(path,'r',encoding='utf-8') as f:
             data=json.load(f)
         if isinstance(data,list):
             return {"shifts_data": data, "turnus": None, "source": path}
         elif isinstance(data,dict):
-            # bbbbbb.json formát: employee_info, shifts_data, turnus_data
             shifts=data.get('shifts_data') or data.get('shifts') or data.get('data') or []
             turnus=data.get('turnus_data') or data.get('turnus') or data.get('turnus_profiles') or None
-            # niekedy je turnus dict s profiles
             if isinstance(turnus, dict) and 'profiles' in turnus:
                 turnus_obj=turnus
             elif isinstance(turnus, list):
@@ -314,6 +316,12 @@ class ZSSKApp(App):
         today=datetime.date.today(); self.cur_year=self.employee.get('cur_year',today.year); self.cur_month=self.employee.get('cur_month',today.month)
         self.theme_key=self.employee.get('theme','tmava'); self.theme=THEMES.get(self.theme_key, THEMES['tmava'])
         self.select_mode=False; self.selected_uids=set()
+
+        # --- NOVÉ: Inicializácia ScreenManagera ---
+        self.sm = ScreenManager(transition=SlideTransition())
+        self.main_screen = MainScreen(name='main')
+        self.editor_screen = EditorScreen(name='editor')
+
         root=BoxLayout(orientation='vertical',padding=dp(4),spacing=dp(3))
         with root.canvas.before: Color(*self.theme['bg']); self.bg=Rectangle(size=root.size,pos=root.pos); root.bind(size=lambda *a: (setattr(self.bg,'size',root.size), setattr(self.bg,'pos',root.pos)))
         header=BoxLayout(orientation='vertical',size_hint_y=None,height=dp(108),spacing=dp(2))
@@ -340,9 +348,16 @@ class ZSSKApp(App):
         self.bulk_bar=BoxLayout(size_hint_y=None,height=dp(0),spacing=dp(6),padding=dp(3),opacity=0)
         self.btn_bulk_del=Button(text='🗑 Zmazať označené (0)',background_normal='',background_color=self.theme['btn_danger'],font_size='12sp'); self.btn_bulk_month=Button(text='🗑 Vymazať mesiac',size_hint_x=None,width=dp(140),background_normal='',background_color=self.theme['btn_danger'],font_size='11sp'); self.btn_bulk_cancel=Button(text='Zrušiť výber',size_hint_x=None,width=dp(100),background_normal='',background_color=self.theme['btn_settings'],font_size='11sp')
         self.btn_bulk_del.bind(on_press=self.delete_selected_confirm); self.btn_bulk_month.bind(on_press=self.delete_month_confirm); self.btn_bulk_cancel.bind(on_press=self.toggle_select_mode); self.bulk_bar.add_widget(self.btn_bulk_del); self.bulk_bar.add_widget(self.btn_bulk_month); self.bulk_bar.add_widget(self.btn_bulk_cancel); root.add_widget(self.bulk_bar)
-        # po build skús načítať vstavané dáta
+
         self.check_bundled_data()
-        self.refresh(); return root
+        self.refresh()
+
+        # --- NOVÉ: Vloženie do ScreenManagera a vrátenie SM ---
+        self.main_screen.add_widget(root)
+        self.sm.add_widget(self.main_screen)
+        self.sm.add_widget(self.editor_screen)
+
+        return self.sm
 
     def _ensure_files(self):
         os.makedirs(self.user_data_dir,exist_ok=True)
@@ -354,20 +369,16 @@ class ZSSKApp(App):
             with open(self.emp_file,'w',encoding='utf-8') as f: json.dump({"name":"Miroslav Kurek","id":"20 814","role":"Rušňovodič","base_salary":"1484.00","theme":"tmava","cur_year":datetime.date.today().year,"cur_month":datetime.date.today().month},f,ensure_ascii=False,indent=2)
 
     def check_bundled_data(self):
-        """Ak existuje data.json alebo bbbbbb.json v APK, naimportuj ho pri prvom spustení alebo ak je väčší"""
         try:
             bundled_files=find_bundled_data()
             if not bundled_files: return
-            # načítaj aktuálne dáta v user_data
             current=self.load_data()
             for bf in bundled_files:
                 bdata=load_bundled_json_file(bf)
                 if not bdata: continue
                 shifts=bdata.get('shifts_data',[])
                 if not shifts: continue
-                # ak je user_data prázdny alebo bundled má viac záznamov, spýtaj sa
                 if len(current)==0 or len(shifts) > len(current):
-                    # automaticky naimportuj bez pýtania pri prvom spustení
                     if len(current)==0:
                         self.save_data(shifts)
                         if bdata.get('turnus'):
@@ -378,12 +389,10 @@ class ZSSKApp(App):
             print(f"check_bundled_data chyba: {e}")
 
     def load_bundled_forced(self):
-        """Vynútené načítanie vstavaných dát z APK - volá sa z nastavení"""
         bundled_files=find_bundled_data()
         if not bundled_files:
             self.show_info("V APK sa nenašiel žiadny data.json ani bbbbbb.json\nUisti sa že data.json je v repozitári vedľa main.py")
             return
-        # ak je viac súborov, vezmi najväčší
         best=None; best_len=0
         for bf in bundled_files:
             bd=load_bundled_json_file(bf)
@@ -392,7 +401,6 @@ class ZSSKApp(App):
         if not best:
             self.show_info("Bundled súbory sú prázdne")
             return
-        # potvrdenie
         pop=Popup(title='Načítať vstavané dáta z APK?',size_hint=(0.90,None),height=dp(340),separator_color=self.theme['accent'])
         box=BoxLayout(orientation='vertical',padding=dp(14),spacing=dp(10))
         box.add_widget(Label(text=f"Našiel sa súbor:\n{best.get('source')}\n{best_len} záznamov\n\nChceš PREPÍSAŤ aktuálne dáta v aplikácii týmito vstavanými?\n\nToto je presne to čo chceš po kompilácii s novým data.json",halign='center',color=self.theme['text'],font_size='11sp'))
@@ -533,6 +541,7 @@ class ZSSKApp(App):
         self.current_totals=totals; self.current_saldo=saldo
         if not self.select_mode: self.lbl_info.text=f'{len(month_data)} záznamov • {format_date_with_weekday.__name__}'
 
+    # --- UPRAVENÝ EDITOR PRE SCREEN MANAGER ---
     def open_editor(self,uid=None):
         if self.select_mode:
             if uid: self.toggle_one(uid)
@@ -543,30 +552,61 @@ class ZSSKApp(App):
                 if d.get('uid')==uid: edit=d; break
         is_new=edit is None
         if is_new: edit={"uid":str(uuid.uuid4()),"date":f"{self.month_key()}-01","shift_type":"Štandardný výkon","train_first":"","route_from":"","train_last":"","route_to":"","turnus":"","start":"","end":"","pc_start":"","pc_end":"","plan":"","pnp_start":"","pnp_end":"","meal_override":"","other_premiums":"","note":""}
-        popup=Popup(title='Upraviť' if not is_new else 'Pridať zmenu',size_hint=(0.96,0.92),separator_color=self.theme['accent'],auto_dismiss=False)
-        root=BoxLayout(orientation='vertical',spacing=dp(6),padding=dp(8)); scroll=ScrollView(); form=GridLayout(cols=1,spacing=dp(8),size_hint_y=None,padding=dp(4)); form.bind(minimum_height=form.setter('height'))
+        
+        self.editor_screen.clear_widgets()
+        
+        root=BoxLayout(orientation='vertical',spacing=dp(6),padding=dp(8))
+        
+        # Nastavenie pozadia pre editor
+        with root.canvas.before:
+            Color(*self.theme['bg'])
+            bg_rect = Rectangle(size=root.size, pos=root.pos)
+        root.bind(size=lambda inst, val: setattr(bg_rect, 'size', val), pos=lambda inst, val: setattr(bg_rect, 'pos', val))
+        
+        header_title = 'Upraviť zmenu' if not is_new else 'Pridať zmenu'
+        root.add_widget(Label(text=header_title, size_hint_y=None, height=dp(30), bold=True, font_size='18sp', color=self.theme['text']))
+        
+        scroll=ScrollView(); form=GridLayout(cols=1,spacing=dp(8),size_hint_y=None,padding=dp(4)); form.bind(minimum_height=form.setter('height'))
+        
         def add_row(lbl,widget):
             b=BoxLayout(orientation='vertical',size_hint_y=None,height=dp(66),spacing=dp(2)); b.add_widget(Label(text=lbl,size_hint_y=None,height=dp(18),halign='left',font_size='11sp',color=self.theme['subtext'])); b.add_widget(widget); form.add_widget(b)
+        
         inp_date=TextInput(text=edit.get('date',''),hint_text='YYYY-MM-DD',multiline=False,size_hint_y=None,height=dp(40),background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); add_row('Dátum (YYYY-MM-DD)',inp_date)
         sp_type=Spinner(text=edit.get('shift_type') or 'Štandardný výkon',values=SHIFT_TYPES,size_hint_y=None,height=dp(42),background_normal='',background_color=self.theme['row_bg']); add_row('Mzdový druh / Typ',sp_type)
         row_t=BoxLayout(size_hint_y=None,height=dp(40),spacing=dp(4)); it=TextInput(text=edit.get('turnus',''),hint_text='TD',multiline=False,size_hint_x=0.25,background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); itf=TextInput(text=edit.get('train_first',''),hint_text='Vlak 1.',multiline=False,background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); itl=TextInput(text=edit.get('train_last',''),hint_text='Vlak posl.',multiline=False,background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); row_t.add_widget(it); row_t.add_widget(itf); row_t.add_widget(itl); add_row('TD + Vlaky',row_t)
         row_r=BoxLayout(size_hint_y=None,height=dp(40),spacing=dp(4)); irf=TextInput(text=edit.get('route_from',''),hint_text='Z',multiline=False,background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); irt=TextInput(text=edit.get('route_to',''),hint_text='Do',multiline=False,background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); row_r.add_widget(irf); row_r.add_widget(irt); add_row('Trať Z → Do',row_r)
+        
         def time_row(label,key):
             r=BoxLayout(size_hint_y=None,height=dp(40),spacing=dp(4)); inp=TextInput(text=edit.get(key,''),hint_text='HH:MM',multiline=False,background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); btn=Button(text='🕒',size_hint_x=None,width=dp(44),background_normal='',background_color=self.theme['btn_export']); btn.bind(on_press=lambda *_: TimePickerPopup(initial=inp.text or "08:00",callback=lambda v:setattr(inp,'text',v)).open()); r.add_widget(inp); r.add_widget(btn); add_row(label,r); return inp
+        
         ins=time_row('Nástup','start'); ine=time_row('Koniec','end'); ipl=time_row('Plán FPČ','plan'); ipcs=time_row('PC zač','pc_start'); ipce=time_row('PC koniec','pc_end'); ipnps=time_row('PNP zač','pnp_start'); ipnpe=time_row('PNP koniec','pnp_end')
         im=TextInput(text=edit.get('meal_override',''),hint_text='prázdne=auto',multiline=False,size_hint_y=None,height=dp(38),background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); add_row('Stravné override €',im)
         io=TextInput(text=edit.get('other_premiums',''),hint_text='Iné €',multiline=False,size_hint_y=None,height=dp(38),background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); add_row('Iné príplatky €',io)
         ino=TextInput(text=edit.get('note',''),multiline=True,size_hint_y=None,height=dp(66),background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); add_row('Poznámka',ino)
+        
         lbl_prev=Label(text='Náhľad: -',size_hint_y=None,height=dp(44),color=self.theme['subtext'],font_size='11sp'); form.add_widget(lbl_prev)
+        
         def upd(*_):
             c=self.calculator.calculate_shift(inp_date.text,ins.text,ine.text,ipl.text,ipcs.text,ipce.text,ipnps.text,ipnpe.text,sp_type.text,im.text,io.text)
             if c: lbl_prev.text=f"Odprac:{c['total_hours']} Dov:{c.get('vacation_minutes',0)//60:02d}:{(c.get('vacation_minutes',0)%60):02d} Strava:{c['meal_allowance']}€"
+            
         for w in [inp_date,ins,ine,ipl,ipcs,ipce,ipnps,ipnpe,im,io]: w.bind(text=lambda *a: upd()); sp_type.bind(text=lambda *a: upd()); upd()
+        
         scroll.add_widget(form); root.add_widget(scroll)
+        
         btns=BoxLayout(size_hint_y=None,height=dp(50),spacing=dp(6)); bc=Button(text='Zrušiť',background_normal='',background_color=self.theme['btn_settings']); bd=Button(text='Zmazať',background_normal='',background_color=(0.78,0.22,0.22,1),size_hint_x=None,width=dp(80)); bs=Button(text='Uložiť',background_normal='',background_color=self.theme['btn_save'],bold=True)
-        bc.bind(on_press=popup.dismiss)
+        
+        # Funkcia pre návrat s animáciou
+        def go_back(*_):
+            self.sm.transition.direction = 'right'
+            self.sm.current = 'main'
+            
+        bc.bind(on_press=go_back)
+        
         def do_del(*_):
-            if not is_new: nd=[d for d in all_data if d.get('uid')!=uid]; self.save_data(nd); self.refresh(); popup.dismiss()
+            if not is_new: nd=[d for d in all_data if d.get('uid')!=uid]; self.save_data(nd); self.refresh()
+            go_back()
+            
         def do_save(*_):
             try: datetime.datetime.strptime(inp_date.text,"%Y-%m-%d")
             except: self.show_info('Zlý dátum YYYY-MM-DD'); return
@@ -575,10 +615,18 @@ class ZSSKApp(App):
             else:
                 for i,d in enumerate(all_data):
                     if d.get('uid')==uid: all_data[i]=ns; break
-            self.save_data(sorted(all_data,key=lambda x:(x.get('date',''),x.get('start','')))); self.refresh(); popup.dismiss()
+            self.save_data(sorted(all_data,key=lambda x:(x.get('date',''),x.get('start','')))); self.refresh()
+            go_back()
+            
         bd.bind(on_press=do_del); bs.bind(on_press=do_save); btns.add_widget(bc); 
         if not is_new: btns.add_widget(bd)
-        btns.add_widget(bs); root.add_widget(btns); popup.content=root; popup.open()
+        btns.add_widget(bs); root.add_widget(btns)
+        
+        self.editor_screen.add_widget(root)
+        
+        # Prepneme pohľad
+        self.sm.transition.direction = 'left'
+        self.sm.current = 'editor'
 
     def open_turnus_manager(self,*a):
         prof_list, active_name, full = self.get_active_turnus()
@@ -746,7 +794,6 @@ class ZSSKApp(App):
         sp_theme=Spinner(text=THEMES[self.theme_key]['name'],values=[v['name'] for v in THEMES.values()],size_hint_y=None,height=dp(42),background_normal='',background_color=self.theme['row_bg']); form.add_widget(sp_theme)
         auto_str=self.get_auto_norm_str(); days=calendar.monthrange(self.cur_year,self.cur_month)[1]
         form.add_widget(Label(text=f'Norma pre {self.month_key()}: {days}×5:08={auto_str}\nDovolenka 5:08/deň znižuje normu.',size_hint_y=None,height=dp(44),font_size='11sp',color=self.theme['subtext'],halign='left'))
-        # NOVÉ - Vstavané dáta
         form.add_widget(Label(text='Vstavané dáta z APK (tvoj data.json)',size_hint_y=None,height=dp(24),bold=True,color=self.theme['accent']))
         bundled=find_bundled_data()
         if bundled:
