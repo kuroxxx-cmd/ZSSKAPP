@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # Nevyhnutné pre vytváranie vydaní (Releases) na GitHube
+  contents: write
 
 jobs:
   build:
@@ -26,25 +26,25 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y git zip unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev cmake libffi-dev libssl-dev libltdl-dev
-          pip install --upgrade pip
-          pip install buildozer==1.5.0 cython==0.29.36
+          # TOTO JE TEN FIX: Zastropujeme pip na staršiu funkčnú verziu
+          pip install "pip<23.0" setuptools virtualenv wheel
+          pip install buildozer cython==0.29.36
 
       - name: Build
         run: yes | buildozer -v android debug
-        env:
-          P4A_PYTHON_VERSION: "3.11"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ZSSK-APK-v8
           path: bin/*.apk
-          
-      - name: Vytvoriť GitHub Release
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
+        if: success()
         with:
           tag_name: build-${{ github.run_number }}
-          name: ZSSK Zmeny Aktualizácia (Build ${{ github.run_number }})
+          name: ZSSK Zmeny (Build ${{ github.run_number }})
           files: bin/*.apk
           draft: false
           prerelease: false
