@@ -22,13 +22,13 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install buildozer
+      - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y git zip unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev cmake libffi-dev libssl-dev libltdl-dev
-          # TOTO JE TEN FIX: Zastropujeme pip na staršiu funkčnú verziu
-          pip install "pip<23.0" setuptools virtualenv wheel
-          pip install buildozer cython==0.29.36
+          pip install --upgrade pip setuptools virtualenv wheel
+          # Kľúčové: Cython 0.29.33 je najstabilnejší pre Kivy 2.3.0
+          pip install buildozer cython==0.29.33
 
       - name: Build
         run: yes | buildozer -v android debug
