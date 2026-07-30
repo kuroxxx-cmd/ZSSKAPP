@@ -9,7 +9,7 @@ source.main = main.py
 version = 15.0
 
 # TVRDÝ FIX 1: Nekompromisné zafixovanie stabilných verzií knižníc
-requirements = python3==3.10.13,kivy==2.2.1,plyer,androidstorage4kivy
+requirements = python3,kivy==2.2.1,plyer,androidstorage4kivy
 
 orientation = portrait
 fullscreen = 0
