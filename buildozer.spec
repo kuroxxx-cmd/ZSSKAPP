@@ -6,10 +6,10 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json
 source.main = main.py
 
-version = 13.0
+version = 16.0
 
-# TVRDÝ FIX 1: Nekompromisné zafixovanie stabilných verzií knižníc
-requirements = python3,kivy,plyer,androidstorage4kivy
+# TVRDÝ FIX: Explicitne pridané 'android' a 'pyjnius', aby ich inštalátor nehľadal na internete
+requirements = python3,kivy,plyer,android,pyjnius,androidstorage4kivy
 
 orientation = portrait
 fullscreen = 0
@@ -31,7 +31,6 @@ android.accept_sdk_license = True
 android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_MEDIA_IMAGES,READ_MEDIA_VIDEO
 android.manifest.intent_filters = 
 
-# TVRDÝ FIX 2: Použitie poslednej nepochybne stabilnej vetvy kompilátora (žiadny master/develop)
 p4a.fork = kivy
 p4a.branch = master
 p4a.bootstrap = sdl2
