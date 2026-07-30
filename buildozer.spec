@@ -6,7 +6,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json
 source.main = main.py
 
-version = 13.0
+version = 14.0
 requirements = python3,kivy==2.3.0,plyer,androidstorage4kivy
 
 orientation = portrait
@@ -30,6 +30,7 @@ android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ
 # Aby plyer mohol otvoriť systémový picker
 android.manifest.intent_filters = 
 
-p4a.fork = kivy
-p4a.branch = master
+# TOTO BOLO ZMAZANÉ/ZAKOMENTOVANÉ:
+# p4a.fork = kivy
+# p4a.branch = master
 p4a.bootstrap = sdl2
