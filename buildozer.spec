@@ -6,8 +6,10 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json
 source.main = main.py
 
-version = 14.0
-requirements = python3,kivy==2.3.0,plyer,androidstorage4kivy
+version = 15.0
+
+# TVRDÝ FIX 1: Nekompromisné zafixovanie stabilných verzií knižníc
+requirements = python3==3.10.13,kivy==2.2.1,plyer,androidstorage4kivy
 
 orientation = portrait
 fullscreen = 0
@@ -27,10 +29,9 @@ android.accept_sdk_license = True
 
 # Pre file manager na Android 13+
 android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_MEDIA_IMAGES,READ_MEDIA_VIDEO
-# Aby plyer mohol otvoriť systémový picker
 android.manifest.intent_filters = 
 
-# TOTO BOLO ZMAZANÉ/ZAKOMENTOVANÉ:
-# p4a.fork = kivy
-# p4a.branch = master
+# TVRDÝ FIX 2: Použitie poslednej nepochybne stabilnej vetvy kompilátora (žiadny master/develop)
+p4a.fork = kivy
+p4a.branch = release-2024.01.21
 p4a.bootstrap = sdl2
