@@ -27,9 +27,9 @@ jobs:
           sudo apt update
           sudo apt install -y git zip unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev cmake libffi-dev libssl-dev libltdl-dev
           
-          # TVRDÝ FIX: Zastropovanie verzií, aby nové updaty nerozbili kompiláciu
+          # TVRDÝ FIX 3: Zastropovanie inštalačných nástrojov a Cythonu
           pip install "pip<24.0" "setuptools<70.0.0" virtualenv wheel
-          pip install buildozer cython==0.29.33
+          pip install buildozer==1.5.0 cython==0.29.33
 
       - name: Build
         run: yes | buildozer -v android debug
