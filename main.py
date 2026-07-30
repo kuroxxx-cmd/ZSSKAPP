@@ -13,10 +13,12 @@ from kivy.metrics import dp
 from kivy.graphics import Color, Rectangle
 from kivy.core.clipboard import Clipboard
 
-# --- IMPORTY PRE OBRAZOVKY ---
 from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition
 
-# --- DEFINÍCIA OBRAZOVIEK ---
+# NOVÉ IMPORTY Z TVOJICH ROZSEKANÝCH SÚBOROV
+from calculator import ShiftCalculator
+from storage import find_bundled_data, load_bundled_json_file, safe_read_any_path
+
 class MainScreen(Screen):
     pass
 
@@ -32,7 +34,6 @@ COLORS_DARK={'Štandardný výkon':(0.15,0.55,0.85,1),'T.V. (Turnus voľno)':(0.
 COLORS_LIGHT={'Štandardný výkon':(0.12,0.42,0.75,1),'T.V. (Turnus voľno)':(0.78,0.78,0.80,1),'Ranná':(0.12,0.42,0.75,1),'Poobedná':(0.90,0.45,0.05,1),'Nočná':(0.28,0.28,0.72,1),'Voľno':(0.22,0.62,0.28,1),'Dovolenka':(0.18,0.62,0.34,1)}
 PATTERN=['Ranná','Ranná','Poobedná','Poobedná','Nočná','Nočná','Voľno','Voľno']
 SHIFT_TIMES={'Ranná':('06:00','14:00','08:00'),'Poobedná':('14:00','22:00','08:00'),'Nočná':('22:00','06:00','08:00'),'Voľno':('','',''),'Dovolenka':('','','05:08'),}
-SK_SVIATKY_FIX={"01-01","01-06","05-01","05-08","07-05","08-29","09-01","09-15","11-01","11-17","12-24","12-25","12-26"}
 WEEKDAYS_SK=['Pon','Uto','Str','Štv','Pia','Sob','Ned']
 
 def format_date_display(iso_date):
@@ -47,137 +48,6 @@ def format_date_with_weekday(iso_date, turnus=''):
         if turnus: return f"{short} {wd} TD {turnus}"
         else: return f"{short} {wd}"
     except: return iso_date
-
-def find_bundled_data():
-    candidates=[]
-    base_dirs=[os.getcwd(), os.path.dirname(__file__), os.path.dirname(os.path.abspath(__file__)), ".", "./ZSSKAPP"]
-    try:
-        from kivy.utils import platform
-        if platform=='android':
-            from android.storage import app_storage_path
-            base_dirs.append(app_storage_path())
-            base_dirs.append("/data/data/org.zssk.zsskzmeny/files/app")
-    except: pass
-    for bd in base_dirs:
-        for name in ["data.json", "bbbbbb.json", "zssk_data.json", "bundle_data.json"]:
-            p=os.path.join(bd, name)
-            if os.path.exists(p) and os.path.isfile(p):
-                candidates.append(p)
-    seen=set(); uniq=[]
-    for c in candidates:
-        if c not in seen:
-            seen.add(c); uniq.append(c)
-    return uniq
-
-def load_bundled_json_file(path):
-    try:
-        with open(path,'r',encoding='utf-8') as f:
-            data=json.load(f)
-        if isinstance(data,list):
-            return {"shifts_data": data, "turnus": None, "source": path}
-        elif isinstance(data,dict):
-            shifts=data.get('shifts_data') or data.get('shifts') or data.get('data') or []
-            turnus=data.get('turnus_data') or data.get('turnus') or data.get('turnus_profiles') or None
-            if isinstance(turnus, dict) and 'profiles' in turnus:
-                turnus_obj=turnus
-            elif isinstance(turnus, list):
-                turnus_obj={"active":"Import","profiles":{"Import":turnus}}
-            else:
-                turnus_obj=None
-            return {"shifts_data": shifts, "turnus": turnus_obj, "employee": data.get('employee_info'), "source": path}
-    except Exception as e:
-        print(f"Chyba načítania bundled {path}: {e}")
-    return None
-
-def safe_read_any_path(path_or_uri):
-    if not path_or_uri: raise Exception("Prázdna cesta")
-    if str(path_or_uri).startswith("content://"):
-        try:
-            from jnius import autoclass
-            PythonActivity=autoclass('org.kivy.android.PythonActivity')
-            activity=PythonActivity.mActivity
-            Uri=autoclass('android.net.Uri')
-            uri=Uri.parse(path_or_uri)
-            cr=activity.getContentResolver()
-            istream=cr.openInputStream(uri)
-            BufferedReader=autoclass('java.io.BufferedReader')
-            InputStreamReader=autoclass('java.io.InputStreamReader')
-            reader=BufferedReader(InputStreamReader(istream))
-            sb=[]
-            while True:
-                line=reader.readLine()
-                if line is None: break
-                sb.append(str(line))
-            reader.close()
-            return "\n".join(sb)
-        except Exception as e:
-            raise Exception(f"Chyba čítania content:// URI: {e}")
-    if os.path.isdir(path_or_uri):
-        raise IsADirectoryError(f"Vybral si priečinok, nie súbor: {path_or_uri}")
-    with open(path_or_uri,'r',encoding='utf-8') as f:
-        return f.read()
-
-class ShiftCalculator:
-    def __init__(self, rates=None): 
-        # Zmena na dynamické sadzby z nastavení
-        self.rates = rates or {"meal_a":9.30,"meal_b":13.80,"meal_c":21.00}
-    def update_rates(self, rates):
-        self.rates = rates
-    def parse_time(self,s):
-        try:
-            if not s or s.strip() in ("","-"): return None
-            p=s.replace(".",":").split(":"); return datetime.time(int(p[0]), int(p[1]) if len(p)>1 else 0)
-        except: return None
-    def get_easter_date(self,y):
-        a=y%19; b=y//100; c=y%100; d=b//4; e=b%4; f=(b+8)//25; g=(b-f+1)//3; h=(19*a+b-d-g+15)%30; i=c//4; k=c%4; L=(32+2*e+2*i-h-k)%7; m=(a+11*h+22*L)//451; mo=(h+L-7*m+114)//31; da=((h+L-7*m+114)%31)+1; return datetime.date(y,mo,da)
-    def is_slovak_holiday(self,d):
-        if d.strftime("%m-%d") in SK_SVIATKY_FIX: return True
-        e=self.get_easter_date(d.year); return d in (e-datetime.timedelta(days=2), e+datetime.timedelta(days=1))
-    def calculate_shift(self,ds,ss,es,plan="",pcs="",pce="",pnps="",pnpe="",st="",mo="",ot=""):
-        stt=self.parse_time(ss); ett=self.parse_time(es); ptt=self.parse_time(plan); pcst=self.parse_time(pcs); pcet=self.parse_time(pce); pnpst=self.parse_time(pnps); pnpet=self.parse_time(pnpe)
-        try: sd=datetime.datetime.strptime(ds,"%Y-%m-%d").date()
-        except: return None
-        def fmt(m): return f"{m//60:02d}:{m%60:02d}"
-        tot=night=sat=sun=hol=pnp=over=0; has=False
-        is_vac=st in ["3000-Dovolenka - bežný rok","3010-Riad.dovol.min.r.","Dovolenka"]; is_abs=st in ["3440-Náhr.m.Ost.prek.nep","8000-Nemoc","8020-OČR","3191-Náhrada za vyšetrenie"]
-        if is_vac or is_abs:
-            abs_mins=308
-            if ptt: abs_mins=ptt.hour*60+ptt.minute
-            return {"total_hours":fmt(abs_mins),"night_hours":"-","saturday_hours":"-","sunday_hours":"-","holiday_hours":"-","pnp_hours":"-","pnp_minutes":0,"overtime":"-","meal_allowance":0.0,"other_allowance":0.0,"vacation_minutes":abs_mins,"is_holiday":self.is_slovak_holiday(sd),"is_weekend":sd.weekday() in (5,6)}
-        if pnpst and pnpet:
-            ps=datetime.datetime.combine(sd,pnpst); pe=datetime.datetime.combine(sd+datetime.timedelta(days=1),pnpet) if pnpet<pnpst else datetime.datetime.combine(sd,pnpet); pnp=int((pe-ps).total_seconds()/60); pnp=max(0,pnp)
-        if stt and ett:
-            has=True; sdt=datetime.datetime.combine(sd,stt); edt=datetime.datetime.combine(sd+datetime.timedelta(days=1),ett) if ett<stt else datetime.datetime.combine(sd,ett); tot=int((edt-sdt).total_seconds()/60); tot=max(0,tot-pnp); cur=sdt
-            while cur<edt:
-                if cur.hour>=22 or cur.hour<6: night+=1
-                if cur.weekday()==5: sat+=1
-                elif cur.weekday()==6: sun+=1
-                if self.is_slovak_holiday(cur.date()): hol+=1
-                cur+=datetime.timedelta(minutes=1)
-        elif ptt and st not in ["T.V. (Turnus voľno)","4181-Náhr.za pr.poh.v p.",""]:
-            has=True; tot=ptt.hour*60+ptt.minute
-        if st=="4181-Náhr.za pr.poh.v p.": has=False; tot=0
-        if ptt and has:
-            pm=ptt.hour*60+ptt.minute
-            if tot>pm: over=tot-pm
-        meal=0.0; mc=""
-        if mo and mo.strip()!="":
-            try: meal=float(mo.replace(",",".")); mc="M"
-            except: pass
-        pcm=0; hpc=False
-        if pcst and pcet: hpc=True; ps=datetime.datetime.combine(sd,pcst); pe=datetime.datetime.combine(sd+datetime.timedelta(days=1),pcet) if pcet<pcst else datetime.datetime.combine(sd,pcet); pcm=int((pe-ps).total_seconds()/60)
-        no_meal=any(st.startswith(x) for x in ["0011","2125","2160","2190","4181","40"])
-        if not mc and not no_meal and (has or hpc):
-            ev=pcm if hpc else tot+pnp; eh=ev/60.0
-            if 5<=eh<=12: meal=self.rates["meal_a"]
-            elif 12<eh<=18: meal=self.rates["meal_b"]
-            elif eh>18: meal=self.rates["meal_c"]
-        oa=0.0
-        if st.startswith("2125") and tot>0: oa=round(tot/60.0,2); has=False; tot=0
-        elif ot and ot.strip()!="":
-            try: oa=float(ot.replace(",","."))
-            except: pass
-        return {"total_hours":fmt(tot) if has else "-","night_hours":fmt(night) if night else "-","saturday_hours":fmt(sat) if sat else "-","sunday_hours":fmt(sun) if sun else "-","holiday_hours":fmt(hol) if hol else "-","pnp_hours":fmt(pnp) if pnp else "-","pnp_minutes":pnp,"overtime":fmt(over) if over else "-","meal_allowance":round(meal,2),"other_allowance":round(oa,2),"vacation_minutes":0,"is_holiday":self.is_slovak_holiday(sd),"is_weekend":sd.weekday() in (5,6)}
 
 class TimePickerPopup(Popup):
     def __init__(self,initial="08:00",callback=None,**kw):
@@ -319,14 +189,12 @@ class ZSSKApp(App):
         self.data_file=os.path.join(self.user_data_dir,'data.json'); self.turnus_file=os.path.join(self.user_data_dir,'turnus.json'); self.emp_file=os.path.join(self.user_data_dir,'employee.json')
         self._ensure_files(); self.employee=self.load_employee()
         
-        # Aplikácia upravených sadzieb na kalkulačku
         self.apply_calculator_rates()
         
         today=datetime.date.today(); self.cur_year=self.employee.get('cur_year',today.year); self.cur_month=self.employee.get('cur_month',today.month)
         self.theme_key=self.employee.get('theme','tmava'); self.theme=THEMES.get(self.theme_key, THEMES['tmava'])
         self.select_mode=False; self.selected_uids=set()
 
-        # --- NOVÉ: Inicializácia ScreenManagera ---
         self.sm = ScreenManager(transition=SlideTransition())
         self.main_screen = MainScreen(name='main')
         self.editor_screen = EditorScreen(name='editor')
@@ -361,7 +229,6 @@ class ZSSKApp(App):
         self.check_bundled_data()
         self.refresh()
 
-        # Vloženie do ScreenManagera
         self.main_screen.add_widget(root)
         self.sm.add_widget(self.main_screen)
         self.sm.add_widget(self.editor_screen)
@@ -591,7 +458,6 @@ class ZSSKApp(App):
         inp_date=TextInput(text=edit.get('date',''),hint_text='YYYY-MM-DD',multiline=False,size_hint_y=None,height=dp(40),background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); add_row('Dátum (YYYY-MM-DD)',inp_date)
         sp_type=Spinner(text=edit.get('shift_type') or 'Štandardný výkon',values=SHIFT_TYPES,size_hint_y=None,height=dp(42),background_normal='',background_color=self.theme['row_bg']); add_row('Mzdový druh / Typ',sp_type)
         
-        # NAŠEPKÁVAČ LOGIKA
         def get_unique_list(key):
             vals = set()
             for x in all_data:
@@ -610,7 +476,6 @@ class ZSSKApp(App):
             if history_list:
                 btn = Button(text='▼', size_hint_x=None, width=dp(28), background_color=self.theme['btn_settings'])
                 dd = DropDown()
-                # Zobrazíme posledných 20 najčastejších / unikátnych
                 for h in history_list[-20:]: 
                     btn_item = Button(text=h, size_hint_y=None, height=dp(44), background_normal='', background_color=self.theme['row_bg'])
                     btn_item.bind(on_release=lambda btn_inst: dd.select(btn_inst.text))
@@ -680,7 +545,6 @@ class ZSSKApp(App):
         btns.add_widget(bs); root.add_widget(btns)
         
         self.editor_screen.add_widget(root)
-        
         self.sm.transition.direction = 'left'
         self.sm.current = 'editor'
 
@@ -738,7 +602,7 @@ class ZSSKApp(App):
                 nm.append(sh)
             keep.extend(nm); self.save_data(keep); self.refresh(); popup.dismiss(); self.show_info(f'Vygenerovaných {len(nm)} dní')
         bg.bind(on_press=gen); btns.add_widget(bc); btns.add_widget(bg); root.add_widget(btns); popup.content=root; popup.open()
-    def open_turnus_generator(self,*a): self.open_turnus_manager(*a)
+
     def get_download_dirs(self):
         ds=[self.user_data_dir]
         for p in ["/storage/emulated/0/Download","/sdcard/Download","/storage/emulated/0/Documents","./"]:
@@ -764,7 +628,6 @@ class ZSSKApp(App):
             TextImportPopup(on_data).open()
         b_text.bind(on_press=do_text_import); box.add_widget(b_text)
         
-        # NOVÉ: Pridaný Export kalendára (.ics)
         for txt,fn in [('Export kalendára (.ics)', self.export_ics), ('Export CSV (mesiac)',self.export_csv),('Export JSON záloha',self.export_json),('Report TXT',self.export_report),('Import zo SÚBORU (systémový picker - fix content://)',self.import_shifts_picker)]:
             b=Button(text=txt,size_hint_y=None,height=dp(44),background_normal='',background_color=self.theme['btn_export'],font_size='11sp'); b.bind(on_press=lambda inst,f=fn: f()); box.add_widget(b)
         bc=Button(text='Zavrieť',size_hint_y=None,height=dp(42),background_normal='',background_color=self.theme['btn_settings']); bc.bind(on_press=pop.dismiss); box.add_widget(bc); pop.content=box; pop.open()
@@ -786,7 +649,6 @@ class ZSSKApp(App):
                 lines.append(f"UID:{d.get('uid', str(uuid.uuid4()))}@zssk.sk")
                 
                 if not st or not en or st == '-' or en == '-':
-                    # Celodenná udalosť (napríklad Turnus Voľno, Dovolenka)
                     lines.append(f"DTSTART;VALUE=DATE:{dt_str}")
                     try:
                         dt_end = (datetime.datetime.strptime(d.get('date'), "%Y-%m-%d") + datetime.timedelta(days=1)).strftime("%Y%m%d")
@@ -794,7 +656,6 @@ class ZSSKApp(App):
                         dt_end = dt_str
                     lines.append(f"DTEND;VALUE=DATE:{dt_end}")
                 else:
-                    # Normálna udalosť s presným časom
                     st_time = st.replace(':', '') + '00'
                     en_time = en.replace(':', '') + '00'
                     lines.append(f"DTSTART:{dt_str}T{st_time}")
@@ -830,7 +691,7 @@ class ZSSKApp(App):
             
             with open(out, 'w', encoding='utf-8') as f:
                 f.write("\n".join(lines))
-            self.show_info(f'Kalendár .ics vygenerovaný:\n{out}\n\nMôžeš ho priamo otvoriť a pridať do Google Kalendára.')
+            self.show_info(f'Kalendár .ics vygenerovaný:\n{out}\n\nMôžeš ho priamo otvoriť a pridať do Kalendára.')
         except Exception as e:
             self.show_info(f'Chyba pri generovaní ICS:\n{e}')
 
@@ -912,8 +773,9 @@ class ZSSKApp(App):
         for txt in [f"Norma {self.get_auto_norm_str()} = {calendar.monthrange(self.cur_year,self.cur_month)[1]} dní × 5:08",f"Odprac+Dov: {(wh+vh):.1f}h × {hod:.2f} = {sb:.2f}€ (Dov {vh:.1f}h = 5:08/deň)",f"Nočné: {sn:.2f}€",f"So+Ne: {(ss+su):.2f}€",f"Sviatok: {shol:.2f}€",f"Iné+65: {t.get('other',0)+65:.2f}€","---",f"HRUBÁ: {hr:.2f}€",f"ČISTÁ ~73%: {ci:.2f}€",f"Stravné: {t.get('meal',0):.2f}€",f"SPOLU: {kv:.2f}€",f"Saldo: {saldo//60:+d}:{(abs(saldo)%60):02d}"]:
             box.add_widget(Label(text=txt,font_size='12sp',halign='left',size_hint_y=None,height=dp(24),color=self.theme['text']))
         b=Button(text='Zavrieť',size_hint_y=None,height=dp(40),background_normal='',background_color=self.theme['btn_settings']); b.bind(on_press=pop.dismiss); box.add_widget(b); pop.content=box; pop.open()
+    
     def open_settings(self,*a):
-        pop=Popup(title='⚙ Nastavenia - v16 (ICS+Šablóny)',size_hint=(0.96,0.96),separator_color=self.theme['accent']); root=BoxLayout(orientation='vertical',spacing=dp(6),padding=dp(10)); scroll=ScrollView(); form=GridLayout(cols=1,spacing=dp(8),size_hint_y=None,padding=dp(2)); form.bind(minimum_height=form.setter('height'))
+        pop=Popup(title='⚙ Nastavenia - v16',size_hint=(0.96,0.96),separator_color=self.theme['accent']); root=BoxLayout(orientation='vertical',spacing=dp(6),padding=dp(10)); scroll=ScrollView(); form=GridLayout(cols=1,spacing=dp(8),size_hint_y=None,padding=dp(2)); form.bind(minimum_height=form.setter('height'))
         form.add_widget(Label(text='Farebná schéma',size_hint_y=None,height=dp(20),bold=True,color=self.theme['text'],halign='left'))
         sp_theme=Spinner(text=THEMES[self.theme_key]['name'],values=[v['name'] for v in THEMES.values()],size_hint_y=None,height=dp(42),background_normal='',background_color=self.theme['row_bg']); form.add_widget(sp_theme)
         auto_str=self.get_auto_norm_str(); days=calendar.monthrange(self.cur_year,self.cur_month)[1]
@@ -930,7 +792,6 @@ class ZSSKApp(App):
         b_load_bundle.bind(on_press=lambda *_: (pop.dismiss(), self.load_bundled_forced())); form.add_widget(b_load_bundle)
 
         inputs={}
-        # PRIDANÉ: Sumy pre stravné priamo do nastavení
         for lbl,key,defv in [('Meno','name',''),('Os. číslo','id',''),('Základná mzda €','base_salary','1484.00'), ('Stravné 5-12h (€)','meal_a','9.30'), ('Stravné 12-18h (€)','meal_b','13.80'), ('Stravné nad 18h (€)','meal_c','21.00')]:
             b=BoxLayout(orientation='vertical',size_hint_y=None,height=dp(62),spacing=dp(2)); b.add_widget(Label(text=lbl,size_hint_y=None,height=dp(18),font_size='11sp',color=self.theme['subtext'],halign='left')); ti=TextInput(text=str(self.employee.get(key,defv)),multiline=False,size_hint_y=None,height=dp(38),background_color=self.theme['input_bg'],foreground_color=self.theme['input_fg']); inputs[key]=ti; b.add_widget(ti); form.add_widget(b)
             
@@ -970,7 +831,6 @@ class ZSSKApp(App):
                 if v['name']==sp_theme.text: self.theme_key=k; break
             for k,ti in inputs.items(): self.employee[k]=ti.text
             self.save_employee()
-            # Po uložení ihneď reštartneme sadzby v kalkulačke
             self.apply_calculator_rates()
             pop.dismiss()
             self.show_info(f'Uložené. Téma a sadzby sa aktualizovali.')
