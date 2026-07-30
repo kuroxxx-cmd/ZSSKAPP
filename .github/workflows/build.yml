@@ -2,6 +2,9 @@ name: Build APK
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write # Nevyhnutné pre vytváranie vydaní (Releases) na GitHube
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -31,8 +34,17 @@ jobs:
         env:
           P4A_PYTHON_VERSION: "3.11"
 
-      - name: Upload APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ZSSK-APK-v8
           path: bin/*.apk
+          
+      - name: Vytvoriť GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: ZSSK Zmeny Aktualizácia (Build ${{ github.run_number }})
+          files: bin/*.apk
+          draft: false
+          prerelease: false
